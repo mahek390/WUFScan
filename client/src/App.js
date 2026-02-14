@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Download, Eye, Clock } from 'lucide-react';
+import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock } from 'lucide-react';
 import History from './History';
 import './App.css';
 
@@ -82,11 +82,6 @@ function App() {
     // Filter only the findings the user selected
     const findingsToRedact = results.regexFindings.filter((_, i) => selectedFindings.includes(i));
     
-    // We need the text to redact. Use the one from file input if available.
-    // Note: For PDFs, this local 'fileText' might be empty/binary. 
-    // In a real production app, the backend should return the extracted text in the scan result.
-    // For this fix, we will send whatever text we have.
-    
     try {
       const response = await axios.post('http://localhost:5001/api/redact', {
         text: fileText, 
@@ -102,16 +97,43 @@ function App() {
     }
   };
 
-  // Download the redacted file
-  const downloadRedacted = () => {
-    const element = document.createElement("a");
-    const file = new Blob([redactedText], {type: 'text/plain'});
-    element.href = URL.createObjectURL(file);
-    element.download = "redacted_document.txt";
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+  // Highlight redacted parts in the text
+  const highlightRedactions = (text) => {
+    if (!text) return null;
+    const findingsToRedact = results.regexFindings.filter((_, i) => selectedFindings.includes(i));
+    let parts = [{ text, isRedacted: false }];
+
+    findingsToRedact.forEach(finding => {
+      const match = finding.fullMatch || finding.content;
+      if (!match) return;
+
+      const newParts = [];
+      parts.forEach(part => {
+        if (part.isRedacted) {
+          newParts.push(part);
+        } else {
+          const segments = part.text.split(match);
+          segments.forEach((segment, i) => {
+            if (segment) newParts.push({ text: segment, isRedacted: false });
+            if (i < segments.length - 1) {
+              newParts.push({ text: match, isRedacted: true });
+            }
+          });
+        }
+      });
+      parts = newParts;
+    });
+
+    return parts.map((part, i) => 
+      part.isRedacted ? (
+        <mark key={i} style={{ background: '#c41e3a', color: '#fff', padding: '2px 4px', borderRadius: '2px' }}>
+          {part.text}
+        </mark>
+      ) : part.text
+    );
   };
+
+
 
   const getStampClass = (level) => {
     if (!level) return 'stamp-text';
@@ -346,7 +368,7 @@ function App() {
                     <div>
                       <h4 style={{ color: '#999', marginBottom: '0.5rem' }}>Original</h4>
                       <pre style={{ background: '#0d0d0d', padding: '1rem', borderRadius: '4px', maxHeight: '300px', overflow: 'auto', fontSize: '12px', whiteSpace: 'pre-wrap' }}>
-                        {fileText || "Preview unavailable for this file type"}
+                        {highlightRedactions(fileText) || "Preview unavailable for this file type"}
                       </pre>
                     </div>
                     <div>
@@ -356,10 +378,6 @@ function App() {
                       </pre>
                     </div>
                   </div>
-                  <button className="upload-btn" onClick={downloadRedacted} style={{ marginTop: '1rem' }}>
-                    <Download size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
-                    Download Redacted File
-                  </button>
                 </div>
               )}
             </section>
