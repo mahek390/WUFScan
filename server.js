@@ -66,6 +66,19 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       }
     });
 
+    // Gemini AI analysis
+    let aiInsights = null;
+    if (text.length > 0) {
+      try {
+        const prompt = `Analyze this document for sensitive data leaks. Look for API keys, credentials, PII, or security risks not caught by regex. Be concise:\n\n${text.substring(0, 5000)}`;
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        aiInsights = response.text();
+      } catch (aiError) {
+        console.error('Gemini API error:', aiError);
+      }
+    }
+
     // Clean up uploaded file
     fs.unlinkSync(file.path);
 
@@ -80,6 +93,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       riskScore: Math.min(riskScore, 100),
       riskLevel,
       findings,
+      aiInsights,
       timestamp: new Date().toISOString()
     });
 
