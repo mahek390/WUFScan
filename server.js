@@ -23,15 +23,19 @@ if (fs.existsSync(HISTORY_FILE)) {
     const loaded = JSON.parse(data);
     scanHistory = loaded.scans || [];
     scanIdCounter = loaded.counter || 1;
+    console.log(`✅ Loaded ${scanHistory.length} scans from history file`);
   } catch (err) {
     console.error('Failed to load history:', err);
   }
+} else {
+  console.log('📝 No history file found, starting fresh');
 }
 
 // Save history to file
 function saveHistory() {
   try {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify({ scans: scanHistory, counter: scanIdCounter }, null, 2));
+    console.log(`💾 Saved ${scanHistory.length} scans to history`);
   } catch (err) {
     console.error('Failed to save history:', err);
   }

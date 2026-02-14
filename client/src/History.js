@@ -8,12 +8,15 @@ function History() {
 
   useEffect(() => {
     fetchHistory();
+    const interval = setInterval(fetchHistory, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchHistory = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/history');
+      const response = await fetch('http://localhost:5001/api/history');
       const data = await response.json();
+      console.log('Fetched history:', data.length, 'scans');
       setScans(data);
     } catch (error) {
       console.error('Failed to fetch history:', error);
