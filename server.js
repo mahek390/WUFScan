@@ -1,8 +1,20 @@
+// ----------------------
+// server.js
+// ----------------------
+
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-require('dotenv').config();
+const fs = require('fs');
+const pdfParse = require('pdf-parse');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+// Initialize Gemini API
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
@@ -10,7 +22,9 @@ const upload = multer({ dest: 'uploads/' });
 app.use(cors());
 app.use(express.json());
 
-// Regex patterns for sensitive data detection
+// ----------------------
+// Regex patterns
+// ----------------------
 const patterns = {
   awsKey: /AKIA[0-9A-Z]{16}/g,
   apiKey: /[a-zA-Z0-9_-]{32,}/g,
@@ -21,28 +35,81 @@ const patterns = {
   ipAddress: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g
 };
 
+// ----------------------
+// Gemini AI scan function
+// ----------------------
+async function runGeminiScan(text) {
+  try {
+    const truncatedText = text.slice(0, 15000); // limit token usage
+
+    const prompt = `
+You are a cybersecurity analyst.
+
+Analyze the following content for sensitive information leakage.
+
+Look for:
+- Hardcoded secrets
+- API tokens
+- Passwords
+- Credentials
+- Personally identifiable information
+- Hidden contextual risks
+
+Return ONLY valid JSON:
+
+{
+  "riskScore": number (0-100),
+  "summary": "short explanation",
+  "issues": [
+    {
+      "type": "string",
+      "severity": "LOW | MEDIUM | HIGH | CRITICAL",
+      "description": "string"
+    }
+  ]
+}
+
+Content:
+${truncatedText}
+`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let textResponse = response.text();
+
+    // Remove markdown formatting if Gemini wraps JSON
+    textResponse = textResponse.replace(/```json|```/g, '').trim();
+
+    return JSON.parse(textResponse);
+
+  } catch (err) {
+    console.error("Gemini scan error:", err);
+    return null;
+  }
+}
+
+// ----------------------
 // Scan endpoint
+// ----------------------
 app.post('/api/scan', upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
-    if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const fs = require('fs');
     let text = '';
 
-    // Extract text based on file type
+    // Extract text from file
     if (file.mimetype === 'text/plain') {
       text = fs.readFileSync(file.path, 'utf-8');
     } else if (file.mimetype === 'application/pdf') {
-      const pdfParse = require('pdf-parse');
       const dataBuffer = fs.readFileSync(file.path);
       const pdfData = await pdfParse(dataBuffer);
       text = pdfData.text;
     }
 
-    // Pattern matching scan
+    // ----------------------
+    // Regex scanning
+    // ----------------------
     const findings = [];
     let riskScore = 0;
 
@@ -66,34 +133,45 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       }
     });
 
-    // Gemini AI analysis
-    let aiInsights = null;
-    if (text.length > 0) {
-      try {
-        const prompt = `Analyze this document for sensitive data leaks. Look for API keys, credentials, PII, or security risks not caught by regex. Be concise:\n\n${text.substring(0, 5000)}`;
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        aiInsights = response.text();
-      } catch (aiError) {
-        console.error('Gemini API error:', aiError);
-      }
+    // ----------------------
+    // Gemini AI scan
+    // ----------------------
+    const aiResult = await runGeminiScan(text);
+
+    let finalRiskScore = Math.min(riskScore, 100);
+    let aiSummary = null;
+    let aiIssues = [];
+
+    if (aiResult) {
+      finalRiskScore = Math.min(
+        100,
+        Math.round((riskScore * 0.6) + (aiResult.riskScore * 0.4))
+      );
+      aiSummary = aiResult.summary;
+      aiIssues = aiResult.issues || [];
     }
+
+    // ----------------------
+    // Determine risk level
+    // ----------------------
+    let finalRiskLevel = 'LOW';
+    if (finalRiskScore > 75) finalRiskLevel = 'CRITICAL';
+    else if (finalRiskScore > 50) finalRiskLevel = 'HIGH';
+    else if (finalRiskScore > 25) finalRiskLevel = 'MEDIUM';
 
     // Clean up uploaded file
     fs.unlinkSync(file.path);
 
-    // Determine risk level
-    let riskLevel = 'LOW';
-    if (riskScore > 75) riskLevel = 'CRITICAL';
-    else if (riskScore > 50) riskLevel = 'HIGH';
-    else if (riskScore > 25) riskLevel = 'MEDIUM';
-
+    // ----------------------
+    // Return combined results
+    // ----------------------
     res.json({
       filename: file.originalname,
-      riskScore: Math.min(riskScore, 100),
-      riskLevel,
-      findings,
-      aiInsights,
+      riskScore: finalRiskScore,
+      riskLevel: finalRiskLevel,
+      regexFindings: findings,
+      aiSummary,
+      aiFindings: aiIssues,
       timestamp: new Date().toISOString()
     });
 
@@ -103,6 +181,9 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
   }
 });
 
+// ----------------------
+// Start server
+// ----------------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🕵️ DataGuardian server running on port ${PORT}`);
