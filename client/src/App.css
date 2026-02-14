@@ -58,6 +58,32 @@ body {
   margin-left: auto;
 }
 
+.nav-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-left: 2rem;
+}
+
+.nav-tab {
+  background: transparent;
+  border: 2px solid var(--noir-paper);
+  color: var(--noir-paper);
+  padding: 0.5rem 1.5rem;
+  cursor: pointer;
+  font-family: 'Special Elite', cursive;
+  transition: all 0.3s ease;
+}
+
+.nav-tab:hover {
+  background: var(--noir-red);
+  border-color: var(--noir-red);
+}
+
+.nav-tab.active {
+  background: var(--noir-red);
+  border-color: var(--noir-red);
+}
+
 /* Main Container */
 .container {
   max-width: 1200px;
