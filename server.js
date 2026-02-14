@@ -1,9 +1,33 @@
+// ----------------------
+// server.js
+// ----------------------
+
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+const pdfParse = require('pdf-parse');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+// Optional dependencies (for extended file support)
+// These are required inside the route to prevent crash if not installed, 
+// but recommended to install via: npm install mammoth xlsx tesseract.js
+let mammoth, XLSX, Tesseract;
+try { mammoth = require('mammoth'); } catch (e) {}
+try { XLSX = require('xlsx'); } catch (e) {}
+try { Tesseract = require('tesseract.js'); } catch (e) {}
+
+// ----------------------
+// Initialize Gemini AI
+// ----------------------
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// ----------------------
+// Express app & multer
+// ----------------------
 const app = express();
 const upload = multer({ 
   dest: 'uploads/',
@@ -13,71 +37,141 @@ const upload = multer({
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage for scan history
-const scanHistory = [];
+// ----------------------
+// Persistent History Setup
+// ----------------------
+const HISTORY_FILE = path.join(__dirname, 'scan-history.json');
+let scanHistory = [];
 let scanIdCounter = 1;
 
-// Regex patterns for sensitive data detection
+// Load history from file on startup
+if (fs.existsSync(HISTORY_FILE)) {
+  try {
+    const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
+    const loaded = JSON.parse(data);
+    scanHistory = loaded.scans || [];
+    scanIdCounter = loaded.counter || 1;
+    console.log(`✅ Loaded ${scanHistory.length} scans from history file`);
+  } catch (err) {
+    console.error('Failed to load history:', err);
+  }
+} else {
+  console.log('📝 No history file found, starting fresh');
+}
+
+// Save history to file
+function saveHistory() {
+  try {
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify({ scans: scanHistory, counter: scanIdCounter }, null, 2));
+  } catch (err) {
+    console.error('Failed to save history:', err);
+  }
+}
+
+// ----------------------
+// Regex patterns
+// ----------------------
 const patterns = {
   awsKey: /AKIA[0-9A-Z]{16}/g,
   apiKey: /[a-zA-Z0-9_-]{32,}/g,
   ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
   creditCard: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-  phone: /(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g,
-  ipAddress: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g
+  phone: /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}\b/g,
+  ipAddress: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g,
+  passport: /\b[A-Z]{1,2}[0-9]{6,9}\b/g,
+  i94: /\b[0-9]{11}\b/g,
+  zipCode: /\b\d{5}(-\d{4})?\b/g
 };
 
+// ----------------------
+// Gemini AI scan function
+// ----------------------
+async function runGeminiScan(text) {
+  try {
+    const truncatedText = text.slice(0, 30000);
+    console.log("Sending to Gemini, text length:", truncatedText.length);
+
+    // Using gemini-2.0-flash-lite as confirmed available
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+
+    const prompt = `
+Extract ALL sensitive data from this document and return a JSON as specified:
+{
+  "riskScore": <total points, max 100>,
+  "summary": "Found X emails, Y phones, Z SSNs, etc.",
+  "issues": [
+    {"type": "Email", "severity": "MEDIUM", "description": "Found email: example@domain.com"},
+    {"type": "Phone", "severity": "MEDIUM", "description": "Found phone: 123-456-7890"},
+    {"type": "SSN", "severity": "CRITICAL", "description": "Found SSN: XXX-XX-1234"}
+  ]
+}
+Document:
+${truncatedText}`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const textResponse = response.text();
+
+    console.log("Raw Gemini response:", textResponse.substring(0, 500));
+
+    const clean = textResponse.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    try {
+      const parsed = JSON.parse(clean);
+      return parsed;
+    } catch (parseErr) {
+      console.error("Error parsing AI response:", parseErr.message);
+      return null;
+    }
+
+  } catch (err) {
+    console.error("Gemini scan error:", err.message);
+    if (err.message.includes('429')) {
+         console.log("⚠️ Quota Exceeded. Returning Regex-only results.");
+    }
+    return null;
+  }
+}
+
+// ----------------------
 // Scan endpoint
+// ----------------------
 app.post('/api/scan', upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
-    if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const fs = require('fs');
     let text = '';
     const ext = path.extname(file.originalname || '').toLowerCase();
-
     const readUtf8 = p => fs.readFileSync(p, 'utf-8');
 
-    // Extract text based on file type / extension
-    if (file.mimetype === 'text/plain' || file.mimetype === 'text/csv' || ext === '.txt' || ext === '.csv') {
-      text = readUtf8(file.path);
-    } else if (file.mimetype === 'application/json' || ext === '.json') {
-      const raw = readUtf8(file.path);
-      try {
-        const obj = JSON.parse(raw);
-        text = JSON.stringify(obj, null, 2);
-      } catch (e) {
-        text = raw;
-      }
-    } else if (file.mimetype === 'application/pdf' || ext === '.pdf') {
-      const pdfParse = require('pdf-parse');
-      const dataBuffer = fs.readFileSync(file.path);
-      const pdfData = await pdfParse(dataBuffer);
-      text = pdfData.text;
-    } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') {
-      const mammoth = require('mammoth');
-      try {
+    // --- File Parsing Logic ---
+    try {
+      if (file.mimetype === 'text/plain' || file.mimetype === 'text/csv' || ext === '.txt' || ext === '.csv') {
+        text = readUtf8(file.path);
+      } 
+      else if (file.mimetype === 'application/json' || ext === '.json') {
+        const raw = readUtf8(file.path);
+        try { text = JSON.stringify(JSON.parse(raw), null, 2); } catch (e) { text = raw; }
+      } 
+      else if (file.mimetype === 'application/pdf' || ext === '.pdf') {
+        const dataBuffer = fs.readFileSync(file.path);
+        const pdfData = await pdfParse(dataBuffer);
+        text = pdfData.text;
+      } 
+      else if ((file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') && mammoth) {
         const result = await mammoth.extractRawText({ path: file.path });
-        text = result && result.value ? result.value : '';
-      } catch (e) {
-        text = '';
-      }
-    } else if (
-      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      ext === '.xlsx' ||
-      file.mimetype === 'application/vnd.ms-excel' ||
-      ext === '.xls'
-    ) {
-      const XLSX = require('xlsx');
-      try {
+        text = result.value || '';
+      } 
+      else if ((file.mimetype.includes('spreadsheet') || file.mimetype.includes('excel') || ext === '.xlsx' || ext === '.xls') && XLSX) {
         const workbook = XLSX.readFile(file.path);
         text = workbook.SheetNames.map(name => XLSX.utils.sheet_to_csv(workbook.Sheets[name])).join('\n');
-      } catch (e) {
-        text = '';
+      } 
+      else if ((['.png', '.jpg', '.jpeg'].includes(ext) || file.mimetype?.startsWith('image/')) && Tesseract) {
+        console.log("Processing image with Tesseract...");
+        const { data: { text: ocrText } } = await Tesseract.recognize(file.path, 'eng');
+        text = ocrText;
       }
     } else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
       text = readUtf8(file.path);
@@ -103,12 +197,25 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       // fallback: attempt to read as utf-8 text
       try {
         text = readUtf8(file.path);
-      } catch (e) {
-        text = '';
+      } 
+      else {
+        // Fallback or unsupported
+        text = "";
+        console.log("Unsupported file type or missing dependency for:", ext);
       }
+    } catch (parseError) {
+      console.error("Error parsing file:", parseError);
+      text = "";
     }
 
-    // Pattern matching scan
+    if (!text || text.trim().length === 0) {
+       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+       return res.status(400).json({ error: 'Could not extract text from file. Format may not be supported.' });
+    }
+
+    // ----------------------
+    // Regex scanning
+    // ----------------------
     const findings = [];
     let riskScore = 0;
 
@@ -116,36 +223,70 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       const matches = text.match(pattern);
       if (matches) {
         matches.forEach(match => {
-          const severity = ['awsKey', 'ssn', 'creditCard'].includes(type) ? 'CRITICAL' : 
-                          type === 'apiKey' ? 'HIGH' : 'MEDIUM';
+          const severity = ['awsKey', 'ssn', 'creditCard'].includes(type)
+            ? 'CRITICAL'
+            : type === 'apiKey'
+            ? 'HIGH'
+            : 'MEDIUM';
           const points = severity === 'CRITICAL' ? 25 : severity === 'HIGH' ? 15 : 10;
-          
+
           findings.push({
             type,
             severity,
             content: match.substring(0, 4) + '...' + match.substring(match.length - 4),
-            fullMatch: match,
+            fullMatch: match, // Needed for redaction
             confidence: 95
           });
-          
+
           riskScore += points;
         });
       }
     });
 
-    // Determine risk level
-    let riskLevel = 'LOW';
-    if (riskScore > 75) riskLevel = 'CRITICAL';
-    else if (riskScore > 50) riskLevel = 'HIGH';
-    else if (riskScore > 25) riskLevel = 'MEDIUM';
+    // ----------------------
+    // Gemini AI scan
+    // ----------------------
+    console.log('Starting AI scan...');
+    const aiResult = await runGeminiScan(text);
+    
+    // ----------------------
+    // Combine Results
+    // ----------------------
+    let finalRiskScore = Math.min(riskScore, 100);
+    let aiSummary = null;
+    let aiIssues = [];
+    let aiScore = 0;
 
+    if (aiResult) {
+      console.log('AI Result Summary:', aiResult.summary);
+      aiScore = aiResult.riskScore || 0;
+      finalRiskScore = Math.min(
+        100,
+        Math.round(riskScore * 0.6 + aiScore * 0.4)
+      );
+      aiSummary = aiResult.summary;
+      aiIssues = aiResult.issues || [];
+    } else {
+      console.log('AI Result: null (Using Regex only)');
+    }
+
+    let finalRiskLevel = 'LOW';
+    if (finalRiskScore > 75) finalRiskLevel = 'CRITICAL';
+    else if (finalRiskScore > 50) finalRiskLevel = 'HIGH';
+    else if (finalRiskScore > 25) finalRiskLevel = 'MEDIUM';
+
+    // Construct Result Object
     const scanResult = {
       id: scanIdCounter++,
       filename: file.originalname,
-      riskScore: Math.min(riskScore, 100),
-      riskLevel,
-      findings,
-      originalText: text,
+      riskScore: finalRiskScore,
+      riskLevel: finalRiskLevel,
+      regexScore: Math.min(riskScore, 100),
+      aiScore,
+      regexFindings: findings,
+      aiSummary,
+      aiFindings: aiIssues,
+      extractedText: text.substring(0, 50000), // Send extracted text for preview
       timestamp: new Date().toISOString()
     };
 
@@ -215,10 +356,100 @@ app.post('/api/redact', express.json(), (req, res) => {
   } catch (error) {
     console.error('Redaction error:', error);
     res.status(500).json({ error: 'Redaction failed' });
+    saveHistory();
+
+    // Clean up uploaded file
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+
+    res.json(scanResult);
+
+  } catch (error) {
+    console.error('Scan error:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Scan failed' });
   }
 });
 
-const PORT = process.env.PORT || 5000;
+// ----------------------
+// Redaction endpoint
+// ----------------------
+app.post('/api/redact', (req, res) => {
+  try {
+    const { text, findings, redactionStyle } = req.body;
+    let redactedText = text || "";
+
+    if (findings && Array.isArray(findings)) {
+      findings.forEach(finding => {
+        const match = finding.fullMatch || finding.content; // Use fullMatch if available
+        if (!match) return;
+        
+        let replacement;
+        switch (redactionStyle) {
+          case 'full':
+            replacement = '[REDACTED]';
+            break;
+          case 'partial':
+            if (match.length > 8) {
+                replacement = match.substring(0, 4) + '***' + match.substring(match.length - 4);
+            } else {
+                replacement = '***';
+            }
+            break;
+          case 'asterisk':
+            replacement = '*'.repeat(match.length);
+            break;
+          case 'block':
+            replacement = '█'.repeat(match.length);
+            break;
+          default:
+            replacement = '[REDACTED]';
+        }
+
+        // Global replace of this specific finding
+        redactedText = redactedText.split(match).join(replacement);
+      });
+    }
+
+    res.json({ redactedText });
+  } catch (error) {
+    console.error('Redaction error:', error);
+    res.status(500).json({ error: 'Redaction failed' });
+  }
+});
+
+// ----------------------
+// History endpoint
+// ----------------------
+app.get('/api/history', (req, res) => {
+  res.json(scanHistory);
+});
+
+// ----------------------
+// Extension scan endpoint
+// ----------------------
+app.post('/api/extension-scan', (req, res) => {
+  try {
+    const scanData = req.body;
+    scanData.id = scanIdCounter++;
+    scanData.timestamp = new Date().toISOString();
+    
+    scanHistory.unshift(scanData);
+    if (scanHistory.length > 100) scanHistory.pop();
+    saveHistory();
+    
+    res.json({ success: true, id: scanData.id });
+  } catch(e) {
+    console.error("Extension scan error", e);
+    res.status(500).json({ error: "Failed to save extension scan" });
+  }
+});
+
+// ----------------------
+// Start server
+// ----------------------
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🕵️ DataGuardian server running on port ${PORT}`);
 });

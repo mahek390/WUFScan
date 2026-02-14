@@ -8,6 +8,8 @@ const patterns = {
   ipAddress: { regex: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, severity: 'MEDIUM', name: 'IP Address' }
 };
 
+let scanIdCounter = 1;
+
 document.getElementById('scanBtn').addEventListener('click', scanText);
 
 function scanText() {
@@ -31,6 +33,22 @@ function scanText() {
       });
     }
   });
+
+  const riskLevel = riskScore > 75 ? 'CRITICAL' : riskScore > 50 ? 'HIGH' : riskScore > 25 ? 'MEDIUM' : 'LOW';
+
+  // Save to server history
+  fetch('http://localhost:5001/api/extension-scan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: 'Browser Extension Scan',
+      riskScore: Math.min(riskScore, 100),
+      riskLevel,
+      findings,
+      findingsCount: findings.length,
+      timestamp: new Date().toISOString()
+    })
+  }).catch(err => console.error('Failed to save scan:', err));
 
   displayResults(Math.min(riskScore, 100), findings);
 }
@@ -72,5 +90,5 @@ function displayResults(score, findings) {
 
 document.getElementById('historyLink').addEventListener('click', (e) => {
   e.preventDefault();
-  chrome.tabs.create({ url: 'http://localhost:3000' });
+  chrome.tabs.create({ url: 'http://localhost:3000/#history' });
 });
