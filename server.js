@@ -31,15 +31,60 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
 
     const fs = require('fs');
     let text = '';
+    const ext = path.extname(file.originalname || '').toLowerCase();
 
-    // Extract text based on file type
-    if (file.mimetype === 'text/plain') {
-      text = fs.readFileSync(file.path, 'utf-8');
-    } else if (file.mimetype === 'application/pdf') {
+    const readUtf8 = p => fs.readFileSync(p, 'utf-8');
+
+    // Extract text based on file type / extension
+    if (file.mimetype === 'text/plain' || file.mimetype === 'text/csv' || ext === '.txt' || ext === '.csv') {
+      text = readUtf8(file.path);
+    } else if (file.mimetype === 'application/json' || ext === '.json') {
+      const raw = readUtf8(file.path);
+      try {
+        const obj = JSON.parse(raw);
+        text = JSON.stringify(obj, null, 2);
+      } catch (e) {
+        text = raw;
+      }
+    } else if (file.mimetype === 'application/pdf' || ext === '.pdf') {
       const pdfParse = require('pdf-parse');
       const dataBuffer = fs.readFileSync(file.path);
       const pdfData = await pdfParse(dataBuffer);
       text = pdfData.text;
+    } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') {
+      const mammoth = require('mammoth');
+      try {
+        const result = await mammoth.extractRawText({ path: file.path });
+        text = result && result.value ? result.value : '';
+      } catch (e) {
+        text = '';
+      }
+    } else if (
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      ext === '.xlsx' ||
+      file.mimetype === 'application/vnd.ms-excel' ||
+      ext === '.xls'
+    ) {
+      const XLSX = require('xlsx');
+      try {
+        const workbook = XLSX.readFile(file.path);
+        text = workbook.SheetNames.map(name => XLSX.utils.sheet_to_csv(workbook.Sheets[name])).join('\n');
+      } catch (e) {
+        text = '';
+      }
+    } else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
+      text = readUtf8(file.path);
+    } else if (['.png', '.jpg', '.jpeg'].includes(ext) || file.mimetype?.startsWith('image/')) {
+      const Tesseract = require('tesseract.js');
+      const { data: { text: ocrText } } = await Tesseract.recognize(file.path, 'eng');
+      text = ocrText;
+    } else {
+      // fallback: attempt to read as utf-8 text
+      try {
+        text = readUtf8(file.path);
+      } catch (e) {
+        text = '';
+      }
     }
 
     // Pattern matching scan
