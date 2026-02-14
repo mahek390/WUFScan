@@ -56,7 +56,6 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const fs = require('fs');
     let text = '';
     const ext = path.extname(file.originalname || '').toLowerCase();
 
@@ -106,7 +105,6 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       const { data: { text: ocrText } } = await Tesseract.recognize(file.path, 'eng');
       text = ocrText;
     } else {
-      // fallback: attempt to read as utf-8 text
       try {
         text = readUtf8(file.path);
       } catch (e) {

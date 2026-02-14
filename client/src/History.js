@@ -12,7 +12,7 @@ function History() {
 
   const fetchHistory = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/history');
+      const response = await fetch('http://localhost:5000/api/history');
       const data = await response.json();
       setScans(data);
     } catch (error) {
