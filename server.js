@@ -7,15 +7,18 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
 const pdfParse = require('pdf-parse');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// Initialize Gemini API
+// ----------------------
+// Initialize Gemini AI
+// ----------------------
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+// ----------------------
+// Express app & multer
+// ----------------------
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
@@ -32,7 +35,10 @@ const patterns = {
   creditCard: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
   phone: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
-  ipAddress: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g
+  ipAddress: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g,
+  passport: /\b[A-Z]{1,2}[0-9]{6,9}\b/g,
+  i94: /\b[0-9]{11}\b/g,
+  zipCode: /\b\d{5}(-\d{4})?\b/g
 };
 
 // ----------------------
@@ -40,50 +46,49 @@ const patterns = {
 // ----------------------
 async function runGeminiScan(text) {
   try {
-    const truncatedText = text.slice(0, 15000); // limit token usage
+    const truncatedText = text.slice(0, 30000);
+    console.log("Sending to Gemini, text length:", truncatedText.length);
+
+    // CHANGED: Using "gemini-2.0-flash-lite" because it is in your available list
+    // and is less likely to hit the strict quotas of the standard Flash model.
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
     const prompt = `
-You are a cybersecurity analyst.
-
-Analyze the following content for sensitive information leakage.
-
-Look for:
-- Hardcoded secrets
-- API tokens
-- Passwords
-- Credentials
-- Personally identifiable information
-- Hidden contextual risks
-
-Return ONLY valid JSON:
-
+Extract ALL sensitive data from this document and return a JSON as specified:
 {
-  "riskScore": number (0-100),
-  "summary": "short explanation",
+  "riskScore": <total points, max 100>,
+  "summary": "Found X emails, Y phones, Z SSNs, etc.",
   "issues": [
-    {
-      "type": "string",
-      "severity": "LOW | MEDIUM | HIGH | CRITICAL",
-      "description": "string"
-    }
+    {"type": "Email", "severity": "MEDIUM", "description": "Found email: example@domain.com"},
+    {"type": "Phone", "severity": "MEDIUM", "description": "Found phone: 123-456-7890"},
+    {"type": "SSN", "severity": "CRITICAL", "description": "Found SSN: XXX-XX-1234"}
   ]
 }
-
-Content:
-${truncatedText}
-`;
+Document:
+${truncatedText}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    let textResponse = response.text();
+    const textResponse = response.text();
 
-    // Remove markdown formatting if Gemini wraps JSON
-    textResponse = textResponse.replace(/```json|```/g, '').trim();
+    console.log("Raw Gemini response:", textResponse.substring(0, 500));
 
-    return JSON.parse(textResponse);
+    // Clean markdown
+    const clean = textResponse.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    try {
+      const parsed = JSON.parse(clean);
+      return parsed;
+    } catch (parseErr) {
+      console.error("Error parsing AI response:", parseErr.message);
+      return null;
+    }
 
   } catch (err) {
-    console.error("Gemini scan error:", err);
+    console.error("Gemini scan error:", err.message);
+    if (err.message.includes('429')) {
+         console.log("⚠️ Quota Exceeded. Returning Regex-only results.");
+    }
     return null;
   }
 }
@@ -105,6 +110,9 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       const dataBuffer = fs.readFileSync(file.path);
       const pdfData = await pdfParse(dataBuffer);
       text = pdfData.text;
+    } else {
+      if(fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      return res.status(400).json({ error: 'Unsupported file type' });
     }
 
     // ----------------------
@@ -117,17 +125,20 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       const matches = text.match(pattern);
       if (matches) {
         matches.forEach(match => {
-          const severity = ['awsKey', 'ssn', 'creditCard'].includes(type) ? 'CRITICAL' : 
-                          type === 'apiKey' ? 'HIGH' : 'MEDIUM';
+          const severity = ['awsKey', 'ssn', 'creditCard'].includes(type)
+            ? 'CRITICAL'
+            : type === 'apiKey'
+            ? 'HIGH'
+            : 'MEDIUM';
           const points = severity === 'CRITICAL' ? 25 : severity === 'HIGH' ? 15 : 10;
-          
+
           findings.push({
             type,
             severity,
             content: match.substring(0, 4) + '...' + match.substring(match.length - 4),
             confidence: 95
           });
-          
+
           riskScore += points;
         });
       }
@@ -136,39 +147,43 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     // ----------------------
     // Gemini AI scan
     // ----------------------
+    console.log('Starting AI scan...');
     const aiResult = await runGeminiScan(text);
-
+    
+    // ----------------------
+    // Combine Results
+    // ----------------------
     let finalRiskScore = Math.min(riskScore, 100);
     let aiSummary = null;
     let aiIssues = [];
+    let aiScore = 0;
 
     if (aiResult) {
+      console.log('AI Result Summary:', aiResult.summary);
+      aiScore = aiResult.riskScore || 0;
       finalRiskScore = Math.min(
         100,
-        Math.round((riskScore * 0.6) + (aiResult.riskScore * 0.4))
+        Math.round(riskScore * 0.6 + aiScore * 0.4)
       );
       aiSummary = aiResult.summary;
       aiIssues = aiResult.issues || [];
+    } else {
+      console.log('AI Result: null (Using Regex only)');
     }
 
-    // ----------------------
-    // Determine risk level
-    // ----------------------
     let finalRiskLevel = 'LOW';
     if (finalRiskScore > 75) finalRiskLevel = 'CRITICAL';
     else if (finalRiskScore > 50) finalRiskLevel = 'HIGH';
     else if (finalRiskScore > 25) finalRiskLevel = 'MEDIUM';
 
-    // Clean up uploaded file
-    fs.unlinkSync(file.path);
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
-    // ----------------------
-    // Return combined results
-    // ----------------------
     res.json({
       filename: file.originalname,
       riskScore: finalRiskScore,
       riskLevel: finalRiskLevel,
+      regexScore: Math.min(riskScore, 100),
+      aiScore,
       regexFindings: findings,
       aiSummary,
       aiFindings: aiIssues,
@@ -177,6 +192,9 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
 
   } catch (error) {
     console.error('Scan error:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+    }
     res.status(500).json({ error: 'Scan failed' });
   }
 });
@@ -184,7 +202,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
 // ----------------------
 // Start server
 // ----------------------
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🕵️ DataGuardian server running on port ${PORT}`);
 });

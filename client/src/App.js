@@ -21,7 +21,7 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/scan', formData);
+      const response = await axios.post('http://localhost:5001/api/scan', formData);
       setResults(response.data);
     } catch (error) {
       console.error('Scan failed:', error);
@@ -42,8 +42,9 @@ function App() {
     return colors[level] || '#999';
   };
 
-  const regexFindings = results?.findings || [];
-  const aiInsights = results?.aiInsights || null;
+  const regexFindings = results?.regexFindings || [];
+  const aiSummary = results?.aiSummary || null;
+  const aiFindings = results?.aiFindings || [];
 
   return (
     <div className="app">
@@ -118,6 +119,22 @@ function App() {
               <div className="risk-label" style={{ color: getRiskColor(results.riskLevel) }}>
                 Threat Level: {results.riskLevel}
               </div>
+              
+              {/* Score Breakdown */}
+              <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginTop: '1.5rem' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#c41e3a' }}>
+                    {results.regexScore || 0}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#999' }}>Regex Score</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#6495ed' }}>
+                    {results.aiScore || 0}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#999' }}>AI Score</div>
+                </div>
+              </div>
             </div>
 
             {/* Regex Findings */}
@@ -147,19 +164,38 @@ function App() {
             )}
 
             {/* AI Insights */}
-            {aiInsights && (
+            {(aiSummary || aiFindings.length > 0) && (
               <div className="findings ai-findings">
                 <h3 className="section-title ai-title">
                   🧠 AI Detective Analysis
                 </h3>
-                <div className="ai-report">
-                  {aiInsights}
-                </div>
+                {aiSummary && (
+                  <div className="ai-report">
+                    <strong>Summary:</strong> {aiSummary}
+                  </div>
+                )}
+                {aiFindings.length > 0 && (
+                  <div style={{ marginTop: '1rem' }}>
+                    {aiFindings.map((issue, index) => (
+                      <div key={index} className={`finding-card ${issue.severity.toLowerCase()}`}>
+                        <div className="finding-header">
+                          <span className="finding-type">{issue.type}</span>
+                          <span className={`severity-badge severity-${issue.severity.toLowerCase()}`}>
+                            {issue.severity}
+                          </span>
+                        </div>
+                        <div className="finding-content">
+                          {issue.description}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* No Issues */}
-            {regexFindings.length === 0 && !aiInsights && (
+            {regexFindings.length === 0 && !aiSummary && aiFindings.length === 0 && (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <CheckCircle size={64} style={{ color: '#2d5016', margin: '0 auto 1rem' }} />
                 <h3 style={{ color: '#2d5016' }}>No Security Issues Found</h3>
