@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Download, Eye } from 'lucide-react';
+import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Download, Eye, Clock } from 'lucide-react';
+import History from './History';
 import './App.css';
 
 function App() {
+  const [activeTab, setActiveTab] = useState('scanner');
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
@@ -11,6 +13,13 @@ function App() {
   const [redactionStyle, setRedactionStyle] = useState('full');
   const [showPreview, setShowPreview] = useState(false);
   const [redactedText, setRedactedText] = useState('');
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash === '#history') {
+      setActiveTab('history');
+    }
+  }, []);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -84,11 +93,28 @@ function App() {
         <div className="header-content">
           <Shield size={40} />
           <h1 className="logo">DataGuardian</h1>
+          <div className="nav-tabs">
+            <button 
+              className={`nav-tab ${activeTab === 'scanner' ? 'active' : ''}`}
+              onClick={() => setActiveTab('scanner')}
+            >
+              <FileText size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+              Scanner
+            </button>
+            <button 
+              className={`nav-tab ${activeTab === 'history' ? 'active' : ''}`}
+              onClick={() => setActiveTab('history')}
+            >
+              <Clock size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+              History
+            </button>
+          </div>
           <p className="tagline">"Your Last Line of Defense Before You Hit Send"</p>
         </div>
       </header>
 
-      <main className="container">
+      {activeTab === 'scanner' ? (
+        <main className="container">
         <section className="upload-section">
           <FileText size={64} className="upload-icon" />
           <h2>Submit Document for Security Screening</h2>
@@ -243,6 +269,9 @@ function App() {
           </section>
         )}
       </main>
+      ) : (
+        <History />
+      )}
     </div>
   );
 }
