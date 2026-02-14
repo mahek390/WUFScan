@@ -38,7 +38,7 @@ function App() {
       if (selectedFile.type.match(/text.*/) || selectedFile.name.match(/\.(json|xml|js|py|env|yml|yaml|md)$/)) {
         reader.readAsText(selectedFile);
       } else {
-        setFileText("(Preview unavailable for binary files like PDF/Docs until converted)");
+        setFileText("(Extracting text from document...)");
       }
     }
   };
@@ -56,8 +56,10 @@ function App() {
       // Select all regex findings by default
       setSelectedFindings(response.data.regexFindings.map((_, i) => i));
       
-      // If the backend parsed a PDF/Doc, it might be helpful if it returned the text, 
-      // but for now we rely on our local read or placeholder.
+      // Use extracted text from backend for PDFs and other binary files
+      if (response.data.extractedText) {
+        setFileText(response.data.extractedText);
+      }
     } catch (error) {
       console.error('Scan failed:', error);
       alert('Scan failed. Please try again.');
