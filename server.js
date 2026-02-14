@@ -51,48 +51,6 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       const dataBuffer = fs.readFileSync(file.path);
       const pdfData = await pdfParse(dataBuffer);
       text = pdfData.text;
-    } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') {
-      const mammoth = require('mammoth');
-      try {
-        const result = await mammoth.extractRawText({ path: file.path });
-        text = result && result.value ? result.value : '';
-      } catch (e) {
-        text = '';
-      }
-    } else if (
-      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      ext === '.xlsx' ||
-      file.mimetype === 'application/vnd.ms-excel' ||
-      ext === '.xls'
-    ) {
-      const XLSX = require('xlsx');
-      try {
-        const workbook = XLSX.readFile(file.path);
-        text = workbook.SheetNames.map(name => XLSX.utils.sheet_to_csv(workbook.Sheets[name])).join('\n');
-      } catch (e) {
-        text = '';
-      }
-    } else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
-      text = readUtf8(file.path);
-    } else if (['.png', '.jpg', '.jpeg'].includes(ext) || file.mimetype?.startsWith('image/')) {
-      console.log('Image detected:', file.originalname);
-      const Tesseract = require('tesseract.js');
-      try {
-        console.log('Starting OCR...');
-        const result = await Tesseract.recognize(file.path, 'eng');
-        text = result.data.text || '';
-        console.log('OCR completed. Text length:', text.length);
-      } catch (e) {
-        console.error('OCR error:', e.message);
-        text = '';
-      }
-    } else {
-      // fallback: attempt to read as utf-8 text
-      try {
-        text = readUtf8(file.path);
-      } catch (e) {
-        text = '';
-      }
     }
 
     // Pattern matching scan
