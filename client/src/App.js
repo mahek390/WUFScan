@@ -47,10 +47,7 @@ function App() {
     }
   };
 
-  const getStampClass = (level) => {
-    return `stamp-text stamp-${level.toLowerCase()}`;
-  };
-
+  const getStampClass = (level) => `stamp-text stamp-${level.toLowerCase()}`;
   const getRiskColor = (level) => {
     const colors = {
       CRITICAL: '#c41e3a',
@@ -61,31 +58,9 @@ function App() {
     return colors[level] || '#999';
   };
 
-  const toggleFinding = (index) => {
-    setSelectedFindings(prev => 
-      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
-    );
-  };
-
-  const handleRedact = async () => {
-    const findingsToRedact = results.findings.filter((_, i) => selectedFindings.includes(i));
-    const response = await axios.post('http://localhost:5001/api/redact', {
-      text: results.originalText,
-      findings: findingsToRedact,
-      redactionStyle
-    });
-    setRedactedText(response.data.redactedText);
-    setShowPreview(true);
-  };
-
-  const downloadRedacted = () => {
-    const blob = new Blob([redactedText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `redacted_${results.filename}`;
-    a.click();
-  };
+  const regexFindings = results?.regexFindings || [];
+  const aiSummary = results?.aiSummary || null;
+  const aiFindings = results?.aiFindings || [];
 
   return (
     <div className="app">
@@ -149,6 +124,7 @@ function App() {
           )}
         </section>
 
+        {/* Loading Animation */}
         {loading && (
           <div className="loading">
             <Shield size={64} className="spinner" />
@@ -159,6 +135,7 @@ function App() {
           </div>
         )}
 
+        {/* Results Section */}
         {results && !loading && (
           <section className="results-section">
             <div className="stamp">
@@ -174,16 +151,32 @@ function App() {
               <div className="risk-label" style={{ color: getRiskColor(results.riskLevel) }}>
                 Threat Level: {results.riskLevel}
               </div>
+              
+              {/* Score Breakdown */}
+              <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginTop: '1.5rem' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#c41e3a' }}>
+                    {results.regexScore || 0}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#999' }}>Regex Score</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#6495ed' }}>
+                    {results.aiScore || 0}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#999' }}>AI Score</div>
+                </div>
+              </div>
             </div>
 
-            {results.findings.length > 0 ? (
-              <div className="findings">
-                <h3>
+            {/* Regex Findings */}
+            {regexFindings.length > 0 && (
+              <div className="findings regex-findings">
+                <h3 className="section-title">
                   <AlertTriangle size={24} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
-                  Security Breaches Detected ({results.findings.length})
+                  Pattern Matches ({regexFindings.length})
                 </h3>
-                
-                {results.findings.map((finding, index) => (
+                {regexFindings.map((finding, index) => (
                   <div key={index} className={`finding-card ${finding.severity.toLowerCase()}`}>
                     <div className="finding-header">
                       <input 
@@ -200,8 +193,7 @@ function App() {
                       </span>
                     </div>
                     <div className="finding-content">
-                      Content: <code>{finding.content}</code>
-                      <br />
+                      Content: <code>{finding.content}</code><br />
                       Confidence: {finding.confidence}%
                     </div>
                   </div>
@@ -233,7 +225,41 @@ function App() {
                   </button>
                 </div>
               </div>
-            ) : (
+            )}
+
+            {/* AI Insights */}
+            {(aiSummary || aiFindings.length > 0) && (
+              <div className="findings ai-findings">
+                <h3 className="section-title ai-title">
+                  🧠 AI Detective Analysis
+                </h3>
+                {aiSummary && (
+                  <div className="ai-report">
+                    <strong>Summary:</strong> {aiSummary}
+                  </div>
+                )}
+                {aiFindings.length > 0 && (
+                  <div style={{ marginTop: '1rem' }}>
+                    {aiFindings.map((issue, index) => (
+                      <div key={index} className={`finding-card ${issue.severity.toLowerCase()}`}>
+                        <div className="finding-header">
+                          <span className="finding-type">{issue.type}</span>
+                          <span className={`severity-badge severity-${issue.severity.toLowerCase()}`}>
+                            {issue.severity}
+                          </span>
+                        </div>
+                        <div className="finding-content">
+                          {issue.description}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* No Issues */}
+            {regexFindings.length === 0 && !aiSummary && aiFindings.length === 0 && (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <CheckCircle size={64} style={{ color: '#2d5016', margin: '0 auto 1rem' }} />
                 <h3 style={{ color: '#2d5016' }}>No Security Issues Found</h3>
