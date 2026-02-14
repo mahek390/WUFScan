@@ -10,6 +10,10 @@ const upload = multer({ dest: 'uploads/' });
 app.use(cors());
 app.use(express.json());
 
+// In-memory storage for scan history
+const scanHistory = [];
+let scanIdCounter = 1;
+
 // Regex patterns for sensitive data detection
 const patterns = {
   awsKey: /AKIA[0-9A-Z]{16}/g,
@@ -118,14 +122,21 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     else if (riskScore > 50) riskLevel = 'HIGH';
     else if (riskScore > 25) riskLevel = 'MEDIUM';
 
-    res.json({
+    const scanResult = {
+      id: scanIdCounter++,
       filename: file.originalname,
       riskScore: Math.min(riskScore, 100),
       riskLevel,
       findings,
       originalText: text,
       timestamp: new Date().toISOString()
-    });
+    };
+
+    // Save to history
+    scanHistory.unshift(scanResult);
+    if (scanHistory.length > 100) scanHistory.pop();
+
+    res.json(scanResult);
 
     // Clean up uploaded file
     fs.unlinkSync(file.path);
