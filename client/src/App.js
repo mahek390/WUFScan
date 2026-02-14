@@ -1,16 +1,22 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Shield, Upload, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
+import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Download, Eye } from 'lucide-react';
 import './App.css';
 
 function App() {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
+  const [selectedFindings, setSelectedFindings] = useState([]);
+  const [redactionStyle, setRedactionStyle] = useState('full');
+  const [showPreview, setShowPreview] = useState(false);
+  const [redactedText, setRedactedText] = useState('');
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
     setResults(null);
+    setSelectedFindings([]);
+    setShowPreview(false);
   };
 
   const handleScan = async () => {
@@ -21,8 +27,9 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/scan', formData);
+      const response = await axios.post('http://localhost:5001/api/scan', formData);
       setResults(response.data);
+      setSelectedFindings(response.data.findings.map((_, i) => i));
     } catch (error) {
       console.error('Scan failed:', error);
       alert('Scan failed. Please try again.');
@@ -43,6 +50,32 @@ function App() {
       LOW: '#2d5016'
     };
     return colors[level] || '#999';
+  };
+
+  const toggleFinding = (index) => {
+    setSelectedFindings(prev => 
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
+  };
+
+  const handleRedact = async () => {
+    const findingsToRedact = results.findings.filter((_, i) => selectedFindings.includes(i));
+    const response = await axios.post('http://localhost:5001/api/redact', {
+      text: results.originalText,
+      findings: findingsToRedact,
+      redactionStyle
+    });
+    setRedactedText(response.data.redactedText);
+    setShowPreview(true);
+  };
+
+  const downloadRedacted = () => {
+    const blob = new Blob([redactedText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `redacted_${results.filename}`;
+    a.click();
   };
 
   return (
@@ -127,6 +160,12 @@ function App() {
                 {results.findings.map((finding, index) => (
                   <div key={index} className={`finding-card ${finding.severity.toLowerCase()}`}>
                     <div className="finding-header">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedFindings.includes(index)}
+                        onChange={() => toggleFinding(index)}
+                        style={{ marginRight: '10px' }}
+                      />
                       <span className="finding-type">
                         {finding.type.toUpperCase().replace(/([A-Z])/g, ' $1').trim()}
                       </span>
@@ -141,6 +180,32 @@ function App() {
                     </div>
                   </div>
                 ))}
+
+                <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#1a1a1a', borderRadius: '8px' }}>
+                  <h4 style={{ marginBottom: '1rem' }}>Redaction Options</h4>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ marginRight: '1rem' }}>
+                      <input type="radio" value="full" checked={redactionStyle === 'full'} onChange={(e) => setRedactionStyle(e.target.value)} />
+                      {' '}[REDACTED]
+                    </label>
+                    <label style={{ marginRight: '1rem' }}>
+                      <input type="radio" value="partial" checked={redactionStyle === 'partial'} onChange={(e) => setRedactionStyle(e.target.value)} />
+                      {' '}Partial (xxx***xxx)
+                    </label>
+                    <label style={{ marginRight: '1rem' }}>
+                      <input type="radio" value="asterisk" checked={redactionStyle === 'asterisk'} onChange={(e) => setRedactionStyle(e.target.value)} />
+                      {' '}Asterisks (***)
+                    </label>
+                    <label>
+                      <input type="radio" value="block" checked={redactionStyle === 'block'} onChange={(e) => setRedactionStyle(e.target.value)} />
+                      {' '}Black Bars (███)
+                    </label>
+                  </div>
+                  <button className="upload-btn" onClick={handleRedact} disabled={selectedFindings.length === 0}>
+                    <Eye size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+                    Preview Redacted Document
+                  </button>
+                </div>
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
@@ -149,6 +214,30 @@ function App() {
                 <p style={{ color: '#999', marginTop: '0.5rem' }}>
                   This document is cleared for sharing
                 </p>
+              </div>
+            )}
+
+            {showPreview && (
+              <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#1a1a1a', borderRadius: '8px' }}>
+                <h3 style={{ marginBottom: '1rem' }}>Redacted Document Preview</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <h4 style={{ color: '#999', marginBottom: '0.5rem' }}>Original</h4>
+                    <pre style={{ background: '#0d0d0d', padding: '1rem', borderRadius: '4px', maxHeight: '300px', overflow: 'auto', fontSize: '12px' }}>
+                      {results.originalText}
+                    </pre>
+                  </div>
+                  <div>
+                    <h4 style={{ color: '#999', marginBottom: '0.5rem' }}>Redacted</h4>
+                    <pre style={{ background: '#0d0d0d', padding: '1rem', borderRadius: '4px', maxHeight: '300px', overflow: 'auto', fontSize: '12px' }}>
+                      {redactedText}
+                    </pre>
+                  </div>
+                </div>
+                <button className="upload-btn" onClick={downloadRedacted} style={{ marginTop: '1rem' }}>
+                  <Download size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+                  Download Redacted File
+                </button>
               </div>
             )}
           </section>

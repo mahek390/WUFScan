@@ -17,7 +17,7 @@ const patterns = {
   ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
   creditCard: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-  phone: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
+  phone: /(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g,
   ipAddress: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g
 };
 
@@ -58,6 +58,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
             type,
             severity,
             content: match.substring(0, 4) + '...' + match.substring(match.length - 4),
+            fullMatch: match,
             confidence: 95
           });
           
@@ -65,9 +66,6 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
         });
       }
     });
-
-    // Clean up uploaded file
-    fs.unlinkSync(file.path);
 
     // Determine risk level
     let riskLevel = 'LOW';
@@ -80,8 +78,12 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       riskScore: Math.min(riskScore, 100),
       riskLevel,
       findings,
+      originalText: text,
       timestamp: new Date().toISOString()
     });
+
+    // Clean up uploaded file
+    fs.unlinkSync(file.path);
 
   } catch (error) {
     console.error('Scan error:', error);
@@ -89,7 +91,44 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
+// Redaction endpoint
+app.post('/api/redact', express.json(), (req, res) => {
+  try {
+    const { text, findings, redactionStyle } = req.body;
+    let redactedText = text;
+
+    findings.forEach(finding => {
+      const match = finding.fullMatch;
+      let replacement;
+
+      switch (redactionStyle) {
+        case 'full':
+          replacement = '[REDACTED]';
+          break;
+        case 'partial':
+          replacement = match.substring(0, 4) + '***' + match.substring(match.length - 4);
+          break;
+        case 'asterisk':
+          replacement = '*'.repeat(match.length);
+          break;
+        case 'block':
+          replacement = '█'.repeat(match.length);
+          break;
+        default:
+          replacement = '[REDACTED]';
+      }
+
+      redactedText = redactedText.replaceAll(match, replacement);
+    });
+
+    res.json({ redactedText });
+  } catch (error) {
+    console.error('Redaction error:', error);
+    res.status(500).json({ error: 'Redaction failed' });
+  }
+});
+
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🕵️ DataGuardian server running on port ${PORT}`);
 });
