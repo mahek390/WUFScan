@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -9,6 +10,32 @@ const upload = multer({ dest: 'uploads/' });
 
 app.use(cors());
 app.use(express.json());
+
+// Persistent storage for scan history
+const HISTORY_FILE = path.join(__dirname, 'scan-history.json');
+let scanHistory = [];
+let scanIdCounter = 1;
+
+// Load history from file on startup
+if (fs.existsSync(HISTORY_FILE)) {
+  try {
+    const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
+    const loaded = JSON.parse(data);
+    scanHistory = loaded.scans || [];
+    scanIdCounter = loaded.counter || 1;
+  } catch (err) {
+    console.error('Failed to load history:', err);
+  }
+}
+
+// Save history to file
+function saveHistory() {
+  try {
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify({ scans: scanHistory, counter: scanIdCounter }, null, 2));
+  } catch (err) {
+    console.error('Failed to save history:', err);
+  }
+}
 
 // Regex patterns for sensitive data detection
 const patterns = {
@@ -118,14 +145,23 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     else if (riskScore > 50) riskLevel = 'HIGH';
     else if (riskScore > 25) riskLevel = 'MEDIUM';
 
-    res.json({
+    const scanResult = {
+      id: scanIdCounter++,
       filename: file.originalname,
       riskScore: Math.min(riskScore, 100),
       riskLevel,
       findings,
+      findingsCount: findings.length,
       originalText: text,
       timestamp: new Date().toISOString()
-    });
+    };
+
+    // Save to history
+    scanHistory.unshift(scanResult);
+    if (scanHistory.length > 100) scanHistory.pop();
+    saveHistory();
+
+    res.json(scanResult);
 
     // Clean up uploaded file
     fs.unlinkSync(file.path);
@@ -171,6 +207,21 @@ app.post('/api/redact', express.json(), (req, res) => {
     console.error('Redaction error:', error);
     res.status(500).json({ error: 'Redaction failed' });
   }
+});
+
+// History endpoint
+app.get('/api/history', (req, res) => {
+  res.json(scanHistory);
+});
+
+// Extension scan endpoint
+app.post('/api/extension-scan', (req, res) => {
+  const scanData = req.body;
+  scanData.id = scanIdCounter++;
+  scanHistory.unshift(scanData);
+  if (scanHistory.length > 100) scanHistory.pop();
+  saveHistory();
+  res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 5001;
