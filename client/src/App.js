@@ -31,10 +31,7 @@ function App() {
     }
   };
 
-  const getStampClass = (level) => {
-    return `stamp-text stamp-${level.toLowerCase()}`;
-  };
-
+  const getStampClass = (level) => `stamp-text stamp-${level.toLowerCase()}`;
   const getRiskColor = (level) => {
     const colors = {
       CRITICAL: '#c41e3a',
@@ -44,6 +41,9 @@ function App() {
     };
     return colors[level] || '#999';
   };
+
+  const regexFindings = results?.findings || [];
+  const aiInsights = results?.aiInsights || null;
 
   return (
     <div className="app">
@@ -56,6 +56,7 @@ function App() {
       </header>
 
       <main className="container">
+        {/* Upload Section */}
         <section className="upload-section">
           <FileText size={64} className="upload-icon" />
           <h2>Submit Document for Security Screening</h2>
@@ -90,6 +91,7 @@ function App() {
           )}
         </section>
 
+        {/* Loading Animation */}
         {loading && (
           <div className="loading">
             <Shield size={64} className="spinner" />
@@ -100,6 +102,7 @@ function App() {
           </div>
         )}
 
+        {/* Results Section */}
         {results && !loading && (
           <section className="results-section">
             <div className="stamp">
@@ -117,14 +120,14 @@ function App() {
               </div>
             </div>
 
-            {results.findings.length > 0 ? (
-              <div className="findings">
-                <h3>
+            {/* Regex Findings */}
+            {regexFindings.length > 0 && (
+              <div className="findings regex-findings">
+                <h3 className="section-title">
                   <AlertTriangle size={24} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
-                  Security Breaches Detected ({results.findings.length})
+                  Pattern Matches ({regexFindings.length})
                 </h3>
-                
-                {results.findings.map((finding, index) => (
+                {regexFindings.map((finding, index) => (
                   <div key={index} className={`finding-card ${finding.severity.toLowerCase()}`}>
                     <div className="finding-header">
                       <span className="finding-type">
@@ -135,14 +138,28 @@ function App() {
                       </span>
                     </div>
                     <div className="finding-content">
-                      Content: <code>{finding.content}</code>
-                      <br />
+                      Content: <code>{finding.content}</code><br />
                       Confidence: {finding.confidence}%
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
+            )}
+
+            {/* AI Insights */}
+            {aiInsights && (
+              <div className="findings ai-findings">
+                <h3 className="section-title ai-title">
+                  🧠 AI Detective Analysis
+                </h3>
+                <div className="ai-report">
+                  {aiInsights}
+                </div>
+              </div>
+            )}
+
+            {/* No Issues */}
+            {regexFindings.length === 0 && !aiInsights && (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <CheckCircle size={64} style={{ color: '#2d5016', margin: '0 auto 1rem' }} />
                 <h3 style={{ color: '#2d5016' }}>No Security Issues Found</h3>
