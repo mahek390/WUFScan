@@ -74,7 +74,7 @@ const patterns = {
   ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
   creditCard: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-  phone: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
+  phone: /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}\b/g,
   ipAddress: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g,
   passport: /\b[A-Z]{1,2}[0-9]{6,9}\b/g,
   i94: /\b[0-9]{11}\b/g,
@@ -261,6 +261,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       regexFindings: findings,
       aiSummary,
       aiFindings: aiIssues,
+      extractedText: text.substring(0, 50000), // Send extracted text for preview
       timestamp: new Date().toISOString()
     };
 
