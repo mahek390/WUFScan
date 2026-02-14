@@ -29,7 +29,10 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // Express app & multer
 // ----------------------
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
 app.use(cors());
 app.use(express.json());
@@ -170,7 +173,29 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
         const { data: { text: ocrText } } = await Tesseract.recognize(file.path, 'eng');
         text = ocrText;
       }
-      else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
+    } else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
+      text = readUtf8(file.path);
+    } else if (['.png', '.jpg', '.jpeg'].includes(ext) || file.mimetype?.startsWith('image/')) {
+      console.log('Image detected:', file.originalname, 'mimetype:', file.mimetype);
+      const Tesseract = require('tesseract.js');
+      try {
+        console.log('Starting OCR processing...');
+        const result = await Tesseract.recognize(file.path, 'eng', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+            }
+          }
+        });
+        text = result.data.text || '';
+        console.log('OCR completed. Extracted text length:', text.length);
+      } catch (e) {
+        console.error('OCR error:', e.message);
+        text = '';
+      }
+    } else {
+      // fallback: attempt to read as utf-8 text
+      try {
         text = readUtf8(file.path);
       } 
       else {
@@ -268,6 +293,69 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     // Save to history
     scanHistory.unshift(scanResult);
     if (scanHistory.length > 100) scanHistory.pop();
+
+    res.json(scanResult);
+
+    // Clean up uploaded file
+    fs.unlinkSync(file.path);
+
+  } catch (error) {
+    console.error('Scan error:', error);
+    console.error('Error stack:', error.stack);
+    
+    // Clean up file if it exists
+    try {
+      if (req.file && req.file.path) {
+        const fs = require('fs');
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      }
+    } catch (cleanupError) {
+      console.error('Cleanup error:', cleanupError);
+    }
+    
+    res.status(500).json({ 
+      error: 'Scan failed', 
+      details: error.message 
+    });
+  }
+});
+
+// Redaction endpoint
+app.post('/api/redact', express.json(), (req, res) => {
+  try {
+    const { text, findings, redactionStyle } = req.body;
+    let redactedText = text;
+
+    findings.forEach(finding => {
+      const match = finding.fullMatch;
+      let replacement;
+
+      switch (redactionStyle) {
+        case 'full':
+          replacement = '[REDACTED]';
+          break;
+        case 'partial':
+          replacement = match.substring(0, 4) + '***' + match.substring(match.length - 4);
+          break;
+        case 'asterisk':
+          replacement = '*'.repeat(match.length);
+          break;
+        case 'block':
+          replacement = '█'.repeat(match.length);
+          break;
+        default:
+          replacement = '[REDACTED]';
+      }
+
+      redactedText = redactedText.replaceAll(match, replacement);
+    });
+
+    res.json({ redactedText });
+  } catch (error) {
+    console.error('Redaction error:', error);
+    res.status(500).json({ error: 'Redaction failed' });
     saveHistory();
 
     // Clean up uploaded file
