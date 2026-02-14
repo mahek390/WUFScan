@@ -1,0 +1,30 @@
+.dataguardian-warning {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #c41e3a;
+  color: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 999999;
+  font-family: 'Courier New', monospace;
+  max-width: 300px;
+}
+
+.dataguardian-warning-header {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.dataguardian-warning-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
