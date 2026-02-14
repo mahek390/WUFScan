@@ -21,7 +21,7 @@ const patterns = {
   ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
   creditCard: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-  phone: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
+  phone: /(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/g,
   ipAddress: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g
 };
 
@@ -35,15 +35,60 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
 
     const fs = require('fs');
     let text = '';
+    const ext = path.extname(file.originalname || '').toLowerCase();
 
-    // Extract text based on file type
-    if (file.mimetype === 'text/plain') {
-      text = fs.readFileSync(file.path, 'utf-8');
-    } else if (file.mimetype === 'application/pdf') {
+    const readUtf8 = p => fs.readFileSync(p, 'utf-8');
+
+    // Extract text based on file type / extension
+    if (file.mimetype === 'text/plain' || file.mimetype === 'text/csv' || ext === '.txt' || ext === '.csv') {
+      text = readUtf8(file.path);
+    } else if (file.mimetype === 'application/json' || ext === '.json') {
+      const raw = readUtf8(file.path);
+      try {
+        const obj = JSON.parse(raw);
+        text = JSON.stringify(obj, null, 2);
+      } catch (e) {
+        text = raw;
+      }
+    } else if (file.mimetype === 'application/pdf' || ext === '.pdf') {
       const pdfParse = require('pdf-parse');
       const dataBuffer = fs.readFileSync(file.path);
       const pdfData = await pdfParse(dataBuffer);
       text = pdfData.text;
+    } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') {
+      const mammoth = require('mammoth');
+      try {
+        const result = await mammoth.extractRawText({ path: file.path });
+        text = result && result.value ? result.value : '';
+      } catch (e) {
+        text = '';
+      }
+    } else if (
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      ext === '.xlsx' ||
+      file.mimetype === 'application/vnd.ms-excel' ||
+      ext === '.xls'
+    ) {
+      const XLSX = require('xlsx');
+      try {
+        const workbook = XLSX.readFile(file.path);
+        text = workbook.SheetNames.map(name => XLSX.utils.sheet_to_csv(workbook.Sheets[name])).join('\n');
+      } catch (e) {
+        text = '';
+      }
+    } else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
+      text = readUtf8(file.path);
+    } else if (['.png', '.jpg', '.jpeg'].includes(ext) || file.mimetype?.startsWith('image/')) {
+      const Tesseract = require('tesseract.js');
+      const { data: { text: ocrText } } = await Tesseract.recognize(file.path, 'eng');
+      text = ocrText;
+    } else {
+      // fallback: attempt to read as utf-8 text
+      try {
+        text = readUtf8(file.path);
+      } catch (e) {
+        text = '';
+      }
     }
 
     // Pattern matching scan
@@ -62,6 +107,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
             type,
             severity,
             content: match.substring(0, 4) + '...' + match.substring(match.length - 4),
+            fullMatch: match,
             confidence: 95
           });
           
@@ -69,9 +115,6 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
         });
       }
     });
-
-    // Clean up uploaded file
-    fs.unlinkSync(file.path);
 
     // Determine risk level
     let riskLevel = 'LOW';
@@ -85,7 +128,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       riskScore: Math.min(riskScore, 100),
       riskLevel,
       findings,
-      findingsCount: findings.length,
+      originalText: text,
       timestamp: new Date().toISOString()
     };
 
@@ -95,18 +138,53 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
 
     res.json(scanResult);
 
+    // Clean up uploaded file
+    fs.unlinkSync(file.path);
+
   } catch (error) {
     console.error('Scan error:', error);
     res.status(500).json({ error: 'Scan failed' });
   }
 });
 
-// History endpoint
-app.get('/api/history', (req, res) => {
-  res.json(scanHistory);
+// Redaction endpoint
+app.post('/api/redact', express.json(), (req, res) => {
+  try {
+    const { text, findings, redactionStyle } = req.body;
+    let redactedText = text;
+
+    findings.forEach(finding => {
+      const match = finding.fullMatch;
+      let replacement;
+
+      switch (redactionStyle) {
+        case 'full':
+          replacement = '[REDACTED]';
+          break;
+        case 'partial':
+          replacement = match.substring(0, 4) + '***' + match.substring(match.length - 4);
+          break;
+        case 'asterisk':
+          replacement = '*'.repeat(match.length);
+          break;
+        case 'block':
+          replacement = '█'.repeat(match.length);
+          break;
+        default:
+          replacement = '[REDACTED]';
+      }
+
+      redactedText = redactedText.replaceAll(match, replacement);
+    });
+
+    res.json({ redactedText });
+  } catch (error) {
+    console.error('Redaction error:', error);
+    res.status(500).json({ error: 'Redaction failed' });
+  }
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🕵️ DataGuardian server running on port ${PORT}`);
 });

@@ -17,6 +17,7 @@ body {
   min-height: 100vh;
 }
 
+/* Noir Theme Colors */
 :root {
   --noir-black: #0a0a0a;
   --noir-dark: #1a1a1a;
@@ -27,6 +28,7 @@ body {
   --noir-orange: #cc5500;
 }
 
+/* Header */
 .header {
   background: var(--noir-black);
   border-bottom: 3px solid var(--noir-red);
@@ -56,38 +58,14 @@ body {
   margin-left: auto;
 }
 
-.nav-tabs {
-  display: flex;
-  gap: 1rem;
-  margin-left: 2rem;
-}
-
-.nav-tab {
-  background: transparent;
-  border: 2px solid var(--noir-paper);
-  color: var(--noir-paper);
-  padding: 0.5rem 1.5rem;
-  cursor: pointer;
-  font-family: 'Special Elite', cursive;
-  transition: all 0.3s ease;
-}
-
-.nav-tab:hover {
-  background: var(--noir-red);
-  border-color: var(--noir-red);
-}
-
-.nav-tab.active {
-  background: var(--noir-red);
-  border-color: var(--noir-red);
-}
-
+/* Main Container */
 .container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
 }
 
+/* Upload Section */
 .upload-section {
   background: rgba(42, 42, 42, 0.9);
   border: 2px dashed var(--noir-paper);
@@ -145,6 +123,7 @@ body {
   transform: none;
 }
 
+/* Results Section */
 .results-section {
   background: rgba(42, 42, 42, 0.95);
   border: 3px solid var(--noir-red);
@@ -196,6 +175,7 @@ body {
   background: rgba(45, 80, 22, 0.1);
 }
 
+/* Risk Score */
 .risk-score {
   text-align: center;
   margin: 2rem 0;
@@ -214,6 +194,7 @@ body {
   letter-spacing: 2px;
 }
 
+/* Findings */
 .findings {
   margin-top: 2rem;
 }
@@ -288,6 +269,7 @@ body {
   margin-top: 0.5rem;
 }
 
+/* Loading */
 .loading {
   text-align: center;
   padding: 3rem;
@@ -303,6 +285,7 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* Responsive */
 @media (max-width: 768px) {
   .header-content {
     flex-direction: column;

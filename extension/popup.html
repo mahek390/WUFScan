@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>DataGuardian</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+      </svg>
+      <h1>DataGuardian</h1>
+    </div>
+    
+    <div class="tagline">"Your Last Line of Defense"</div>
+    
+    <div class="scan-section">
+      <textarea id="textInput" placeholder="Paste text to scan for sensitive data..."></textarea>
+      <button id="scanBtn" class="scan-btn">Scan Text</button>
+    </div>
+    
+    <div id="results" class="results hidden">
+      <div class="risk-display">
+        <div id="riskScore" class="risk-score">0</div>
+        <div id="riskLevel" class="risk-level">LOW</div>
+      </div>
+      <div id="findings" class="findings"></div>
+    </div>
+    
+    <div class="footer">
+      <a href="#" id="historyLink">View History</a>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
