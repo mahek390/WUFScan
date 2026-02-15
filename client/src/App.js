@@ -195,7 +195,7 @@ function App() {
       <header className="header">
         <div className="header-content">
           <Shield size={40} />
-          <h1 className="logo">DataGuardian</h1>
+          <h1 className="logo">WufScan</h1>
           <div className="nav-tabs">
             <button 
               className={`nav-tab ${activeTab === 'scanner' ? 'active' : ''}`}

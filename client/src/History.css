@@ -1,232 +1,572 @@
+/* HISTORY - Detective's Case Archive */
+
 .history-container {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 4rem 3rem;
+  animation: archive-open 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+@keyframes archive-open {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .history-header {
   text-align: center;
-  margin-bottom: 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
+  margin-bottom: 4rem;
+  position: relative;
 }
 
+/* MAIN TITLE - Neon Archive Sign */
 .history-header h1 {
-  font-family: 'Special Elite', cursive;
-  font-size: 2.5rem;
-  color: #e8dcc4;
-  margin: 0;
+  font-family: 'Abril Fatface', serif;
+  font-size: 4rem;
+  font-weight: 900;
+  color: var(--noir-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  text-shadow: 
+    0 0 20px var(--noir-gold),
+    0 0 40px rgba(205, 164, 94, 0.5),
+    5px 5px 0 rgba(0, 0, 0, 0.8);
+  animation: title-flicker 5s infinite alternate;
 }
 
+@keyframes title-flicker {
+  0%, 100% { 
+    text-shadow: 
+      0 0 20px var(--noir-gold),
+      0 0 40px rgba(205, 164, 94, 0.5),
+      5px 5px 0 rgba(0, 0, 0, 0.8);
+  }
+  94%, 96% { 
+    text-shadow: 
+      0 0 10px var(--noir-gold),
+      5px 5px 0 rgba(0, 0, 0, 0.8);
+  }
+}
+
+.history-header h1 svg {
+  filter: drop-shadow(0 0 20px var(--noir-gold));
+}
+
+/* SUBTITLE - Case Archive Description */
 .subtitle {
-  color: #999;
+  font-family: 'Courier Prime', monospace;
+  font-size: 1.125rem;
   font-style: italic;
+  color: var(--noir-gray);
+  letter-spacing: 0.1em;
 }
 
+/* STATS GRID - Crime Board */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
 }
 
 .stat-card {
-  background: rgba(42, 42, 42, 0.9);
-  border: 2px solid #e8dcc4;
-  border-radius: 8px;
-  padding: 1.5rem;
-  text-align: center;
-  transition: all 0.3s ease;
+  background: 
+    linear-gradient(135deg, rgba(37, 37, 37, 0.9) 0%, rgba(26, 26, 26, 0.9) 100%),
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 10px,
+      rgba(205, 164, 94, 0.02) 10px,
+      rgba(205, 164, 94, 0.02) 20px
+    );
+  border: 3px solid var(--noir-smoke);
+  box-shadow: 
+    0 10px 40px rgba(0, 0, 0, 0.8),
+    inset 0 0 40px rgba(0, 0, 0, 0.5);
+  padding: 2.5rem;
+  transition: all 0.4s;
+  position: relative;
+  overflow: hidden;
+}
+
+/* EVIDENCE TAPE */
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--noir-gold),
+    var(--noir-gold) 15px,
+    var(--noir-black) 15px,
+    var(--noir-black) 30px
+  );
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s;
 }
 
 .stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transform: translateY(-8px) scale(1.02);
+  border-color: var(--noir-gold);
+  box-shadow: 
+    0 15px 50px rgba(0, 0, 0, 0.9),
+    0 0 40px rgba(205, 164, 94, 0.3),
+    inset 0 0 50px rgba(0, 0, 0, 0.6);
 }
 
-.stat-card.critical {
-  border-color: #c41e3a;
+.stat-card:hover::before {
+  transform: scaleX(1);
 }
 
-.stat-card.success {
-  border-color: #2d5016;
+.stat-card svg {
+  color: var(--noir-gold);
+  opacity: 0.5;
+  margin-bottom: 1.5rem;
+  filter: drop-shadow(0 0 15px rgba(205, 164, 94, 0.5));
+  transition: all 0.3s;
 }
 
+.stat-card:hover svg {
+  opacity: 0.9;
+  transform: scale(1.1);
+}
+
+.stat-card.critical svg {
+  color: var(--noir-red);
+  filter: drop-shadow(0 0 15px rgba(230, 57, 70, 0.5));
+}
+
+.stat-card.success svg {
+  color: var(--noir-cyan);
+  filter: drop-shadow(0 0 15px rgba(79, 209, 197, 0.5));
+}
+
+/* STAT VALUE - Big Numbers */
 .stat-value {
-  font-family: 'Special Elite', cursive;
-  font-size: 3rem;
-  color: #e8dcc4;
-  margin: 0.5rem 0;
+  font-family: 'Abril Fatface', serif;
+  font-size: 4rem;
+  font-weight: 900;
+  color: var(--noir-white);
+  line-height: 1;
+  margin-bottom: 0.5rem;
+  text-shadow: 4px 4px 0 rgba(0, 0, 0, 0.8);
 }
 
 .stat-label {
-  color: #999;
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--noir-gray);
   text-transform: uppercase;
-  letter-spacing: 1px;
-  font-size: 0.9rem;
+  letter-spacing: 0.15em;
 }
 
+/* FILTER BAR - Case Selector */
 .filter-bar {
   display: flex;
   gap: 1rem;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
+  margin-bottom: 3rem;
+  background: rgba(26, 26, 26, 0.8);
+  padding: 1rem;
+  border: 2px solid var(--noir-smoke);
+  box-shadow: 
+    0 10px 30px rgba(0, 0, 0, 0.8),
+    inset 0 2px 10px rgba(0, 0, 0, 0.8);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.filter-bar::-webkit-scrollbar {
+  height: 6px;
+}
+
+.filter-bar::-webkit-scrollbar-track {
+  background: var(--noir-black);
+}
+
+.filter-bar::-webkit-scrollbar-thumb {
+  background: var(--noir-gold);
 }
 
 .filter-bar button {
-  background: rgba(42, 42, 42, 0.9);
-  border: 2px solid #e8dcc4;
-  color: #e8dcc4;
-  padding: 0.5rem 1.5rem;
+  padding: 0.875rem 2rem;
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--noir-gray);
+  background: linear-gradient(180deg, rgba(37, 37, 37, 0.9) 0%, rgba(26, 26, 26, 0.9) 100%);
+  border: 2px solid var(--noir-smoke);
   cursor: pointer;
-  font-family: 'Courier New', monospace;
-  transition: all 0.3s ease;
-  border-radius: 4px;
+  transition: all 0.3s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.filter-bar button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--noir-gold);
+  transform: scaleX(0);
+  transition: transform 0.3s;
 }
 
 .filter-bar button:hover {
-  background: #c41e3a;
-  border-color: #c41e3a;
+  color: var(--noir-gold);
+  border-color: var(--noir-gold);
+  box-shadow: 0 0 20px rgba(205, 164, 94, 0.3);
+}
+
+.filter-bar button:hover::before {
+  transform: scaleX(1);
 }
 
 .filter-bar button.active {
-  background: #c41e3a;
-  border-color: #c41e3a;
+  color: var(--noir-black);
+  background: var(--noir-gold);
+  border-color: var(--noir-gold-bright);
+  box-shadow: 0 0 30px rgba(205, 164, 94, 0.6);
+  font-weight: 900;
+}
+
+/* SCANS LIST - Case Files */
+.scans-list {
+  display: grid;
+  gap: 2rem;
+}
+
+/* SCAN CARD - Individual Case File */
+.scan-card {
+  background: 
+    linear-gradient(135deg, rgba(37, 37, 37, 0.9) 0%, rgba(26, 26, 26, 0.9) 100%);
+  border: 3px solid var(--noir-smoke);
+  box-shadow: 
+    0 10px 40px rgba(0, 0, 0, 0.8),
+    inset 0 0 40px rgba(0, 0, 0, 0.5);
+  padding: 2.5rem;
+  transition: all 0.4s;
+  cursor: pointer;
+  position: relative;
+  animation: file-slide 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@keyframes file-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-50px) rotateY(-10deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) rotateY(0);
+  }
+}
+
+.scan-card:nth-child(1) { animation-delay: 0.1s; }
+.scan-card:nth-child(2) { animation-delay: 0.2s; }
+.scan-card:nth-child(3) { animation-delay: 0.3s; }
+.scan-card:nth-child(4) { animation-delay: 0.4s; }
+.scan-card:nth-child(5) { animation-delay: 0.5s; }
+
+/* CASE NUMBER TAG */
+.scan-card::before {
+  content: 'CASE #' counter(case);
+  counter-increment: case;
+  position: absolute;
+  top: -1px;
+  left: 2rem;
+  background: var(--noir-red);
+  color: var(--noir-white);
+  padding: 0.5rem 1.25rem;
+  font-family: 'Courier Prime', monospace;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  box-shadow: 0 4px 10px rgba(230, 57, 70, 0.5);
 }
 
 .scans-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  background: rgba(42, 42, 42, 0.9);
-  border: 2px dashed #e8dcc4;
-  border-radius: 8px;
-}
-
-.empty-state h3 {
-  font-family: 'Special Elite', cursive;
-  color: #e8dcc4;
-  margin: 1rem 0;
-}
-
-.empty-state p {
-  color: #999;
-}
-
-.scan-card {
-  background: rgba(42, 42, 42, 0.9);
-  border-left: 4px solid;
-  border-radius: 4px;
-  padding: 1.5rem;
-  transition: all 0.3s ease;
+  counter-reset: case;
 }
 
 .scan-card:hover {
-  transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transform: translateX(15px) scale(1.01);
+  border-color: var(--noir-gold);
+  box-shadow: 
+    0 15px 50px rgba(0, 0, 0, 0.9),
+    0 0 40px rgba(205, 164, 94, 0.4),
+    inset 0 0 50px rgba(0, 0, 0, 0.6);
 }
 
+/* RISK-BASED BORDERS */
 .scan-card.risk-critical {
-  border-color: #c41e3a;
+  border-left: 8px solid var(--noir-red);
+}
+
+.scan-card.risk-critical:hover {
+  box-shadow: 
+    0 15px 50px rgba(0, 0, 0, 0.9),
+    0 0 40px rgba(230, 57, 70, 0.6),
+    inset 0 0 50px rgba(0, 0, 0, 0.6);
 }
 
 .scan-card.risk-high {
-  border-color: #cc5500;
+  border-left: 8px solid #F59E0B;
+}
+
+.scan-card.risk-high:hover {
+  box-shadow: 
+    0 15px 50px rgba(0, 0, 0, 0.9),
+    0 0 40px rgba(245, 158, 11, 0.6),
+    inset 0 0 50px rgba(0, 0, 0, 0.6);
 }
 
 .scan-card.risk-medium {
-  border-color: #d4a017;
+  border-left: 8px solid var(--noir-gold);
+}
+
+.scan-card.risk-medium:hover {
+  box-shadow: 
+    0 15px 50px rgba(0, 0, 0, 0.9),
+    0 0 40px rgba(205, 164, 94, 0.6),
+    inset 0 0 50px rgba(0, 0, 0, 0.6);
 }
 
 .scan-card.risk-low {
-  border-color: #2d5016;
+  border-left: 8px solid #10B981;
 }
 
+.scan-card.risk-low:hover {
+  box-shadow: 
+    0 15px 50px rgba(0, 0, 0, 0.9),
+    0 0 40px rgba(16, 185, 129, 0.6),
+    inset 0 0 50px rgba(0, 0, 0, 0.6);
+}
+
+/* SCAN HEADER */
 .scan-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+  gap: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid var(--noir-smoke);
 }
 
 .scan-info {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 1.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.scan-info svg {
+  flex-shrink: 0;
+  color: var(--noir-gold);
+  opacity: 0.6;
+  filter: drop-shadow(0 0 10px rgba(205, 164, 94, 0.4));
 }
 
 .filename {
-  font-weight: bold;
-  font-size: 1.1rem;
-  color: #e8dcc4;
+  font-family: 'Courier Prime', monospace;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--noir-white);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.05em;
 }
 
+/* RISK BADGE - Evidence Tag Style */
 .risk-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: bold;
+  padding: 0.625rem 1.5rem;
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.75rem;
+  font-weight: 900;
   text-transform: uppercase;
+  letter-spacing: 0.2em;
+  flex-shrink: 0;
+  border: 2px solid;
+  box-shadow: 0 0 15px currentColor;
+  position: relative;
+}
+
+/* BLINKING WARNING DOT */
+.risk-badge::before {
+  content: '●';
+  position: absolute;
+  left: 0.5rem;
+  font-size: 0.5rem;
+  animation: warning-blink 1.5s infinite;
+}
+
+@keyframes warning-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .risk-badge.critical {
-  background: #c41e3a;
-  color: white;
+  background: rgba(230, 57, 70, 0.2);
+  color: var(--noir-red);
+  border-color: var(--noir-red);
 }
 
 .risk-badge.high {
-  background: #cc5500;
-  color: white;
+  background: rgba(245, 158, 11, 0.2);
+  color: #F59E0B;
+  border-color: #F59E0B;
 }
 
 .risk-badge.medium {
-  background: #d4a017;
-  color: black;
+  background: rgba(205, 164, 94, 0.2);
+  color: var(--noir-gold);
+  border-color: var(--noir-gold);
 }
 
 .risk-badge.low {
-  background: #2d5016;
-  color: white;
+  background: rgba(16, 185, 129, 0.2);
+  color: #10B981;
+  border-color: #10B981;
 }
 
+/* SCAN DETAILS - Case Info Grid */
 .scan-details {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 2rem;
-  flex-wrap: wrap;
 }
 
 .detail {
   display: flex;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
-.detail .label {
-  color: #999;
+.label {
+  font-family: 'Courier Prime', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--noir-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
 }
 
-.detail .value {
-  color: #e8dcc4;
-  font-weight: bold;
+.value {
+  font-family: 'Courier Prime', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--noir-white);
+  letter-spacing: 0.05em;
 }
 
+/* EMPTY STATE - No Cases */
+.empty-state {
+  text-align: center;
+  padding: 5rem 3rem;
+  background: rgba(26, 26, 26, 0.6);
+  border: 3px dashed var(--noir-smoke);
+  box-shadow: 
+    0 10px 40px rgba(0, 0, 0, 0.8),
+    inset 0 0 60px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+/* LONELY DETECTIVE SILHOUETTE */
+.empty-state::before {
+  content: '🕵️';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12rem;
+  opacity: 0.03;
+}
+
+.empty-state svg {
+  color: var(--noir-gold);
+  opacity: 0.3;
+  margin-bottom: 2rem;
+  filter: drop-shadow(0 0 20px rgba(205, 164, 94, 0.3));
+}
+
+.empty-state h3 {
+  font-family: 'Abril Fatface', serif;
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--noir-white);
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+  letter-spacing: 0.1em;
+}
+
+.empty-state p {
+  font-family: 'Courier Prime', monospace;
+  font-size: 1rem;
+  font-style: italic;
+  color: var(--noir-gray);
+}
+
+/* RESPONSIVE */
 @media (max-width: 768px) {
+  .history-container {
+    padding: 2rem 1.5rem;
+  }
+  
+  .history-header h1 {
+    font-size: 2.5rem;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
   .stats-grid {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .stat-value {
+    font-size: 3rem;
   }
   
   .filter-bar {
-    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+  
+  .filter-bar button {
+    padding: 0.75rem 1.5rem;
+    font-size: 0.75rem;
+  }
+  
+  .scan-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
   
   .scan-details {
-    flex-direction: column;
-    gap: 0.5rem;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 }
