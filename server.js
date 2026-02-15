@@ -47,7 +47,10 @@ if (process.env.EMAIL_ENABLED === 'true' && nodemailer) {
 // Express app & multer
 // ----------------------
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
 app.use(cors());
 app.use(express.json());
@@ -194,9 +197,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
         text = readUtf8(file.path);
       } 
       else {
-        // Fallback or unsupported
-        text = "";
-        console.log("Unsupported file type or missing dependency for:", ext);
+        text = readUtf8(file.path);
       }
     } catch (parseError) {
       console.error("Error parsing file:", parseError);
@@ -290,9 +291,12 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     if (scanHistory.length > 100) scanHistory.pop();
     saveHistory();
 
+    res.json(scanResult);
+
     // Clean up uploaded file
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
+<<<<<<< HEAD
     res.json(scanResult);
 
     // Send email after response (non-blocking)
@@ -315,54 +319,60 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       });
     }
 
+=======
+>>>>>>> 4c45e7502b8060c4c3309cf7a497bd0e5a8c7c7c
   } catch (error) {
     console.error('Scan error:', error);
-    if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+    console.error('Error stack:', error.stack);
+    
+    // Clean up file if it exists
+    try {
+      if (req.file && req.file.path) {
+        const fs = require('fs');
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      }
+    } catch (cleanupError) {
+      console.error('Cleanup error:', cleanupError);
     }
-    res.status(500).json({ error: 'Scan failed' });
+    
+    res.status(500).json({ 
+      error: 'Scan failed', 
+      details: error.message 
+    });
   }
 });
 
-// ----------------------
 // Redaction endpoint
-// ----------------------
-app.post('/api/redact', (req, res) => {
+app.post('/api/redact', express.json(), (req, res) => {
   try {
     const { text, findings, redactionStyle } = req.body;
-    let redactedText = text || "";
+    let redactedText = text;
 
-    if (findings && Array.isArray(findings)) {
-      findings.forEach(finding => {
-        const match = finding.fullMatch || finding.content; // Use fullMatch if available
-        if (!match) return;
-        
-        let replacement;
-        switch (redactionStyle) {
-          case 'full':
-            replacement = '[REDACTED]';
-            break;
-          case 'partial':
-            if (match.length > 8) {
-                replacement = match.substring(0, 4) + '***' + match.substring(match.length - 4);
-            } else {
-                replacement = '***';
-            }
-            break;
-          case 'asterisk':
-            replacement = '*'.repeat(match.length);
-            break;
-          case 'block':
-            replacement = '█'.repeat(match.length);
-            break;
-          default:
-            replacement = '[REDACTED]';
-        }
+    findings.forEach(finding => {
+      const match = finding.fullMatch;
+      let replacement;
 
-        // Global replace of this specific finding
-        redactedText = redactedText.split(match).join(replacement);
-      });
-    }
+      switch (redactionStyle) {
+        case 'full':
+          replacement = '[REDACTED]';
+          break;
+        case 'partial':
+          replacement = match.substring(0, 4) + '***' + match.substring(match.length - 4);
+          break;
+        case 'asterisk':
+          replacement = '*'.repeat(match.length);
+          break;
+        case 'block':
+          replacement = '█'.repeat(match.length);
+          break;
+        default:
+          replacement = '[REDACTED]';
+      }
+
+      redactedText = redactedText.replaceAll(match, replacement);
+    });
 
     res.json({ redactedText });
   } catch (error) {
@@ -382,6 +392,7 @@ app.get('/api/history', (req, res) => {
 // Extension scan endpoint
 // ----------------------
 app.post('/api/extension-scan', (req, res) => {
+
   try {
     const scanData = req.body;
     scanData.id = scanIdCounter++;
