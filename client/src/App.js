@@ -420,7 +420,7 @@ function App() {
             </label>
 
             <div style={{ marginTop: '1.5rem', color: '#6a6a60', fontSize: '0.875rem', letterSpacing: '0.05em' }}>
-              All file formats supported
+              Accepted: .TXT, .PDF, .DOCX, .CSV, .py, .js, .java, .cpp, .c, .xml, .html, .tex, .yaml, .yml, .env, images, videos
             </div>
 
             {file && (
