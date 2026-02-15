@@ -12,6 +12,9 @@ const path = require('path');
 const crypto = require('crypto');
 const pdfParse = require('pdf-parse');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 const Redis = require('ioredis');
 
 // Optional dependencies (for extended file support)
@@ -159,9 +162,18 @@ Extract ALL sensitive data from this document and return a JSON as specified:
   "issues": [
     {"type": "Email", "severity": "MEDIUM", "description": "Found email: example@domain.com"},
     {"type": "Phone", "severity": "MEDIUM", "description": "Found phone: 123-456-7890"},
-    {"type": "SSN", "severity": "CRITICAL", "description": "Found SSN: XXX-XX-1234"}
+    {"type": "SSN", "severity": "CRITICAL", "description": "Found SSN: XXX-XX-1234"},
+    {"type": "Face/Photo", "severity": "HIGH", "description": "Document contains photo of person or face"}
   ]
 }
+
+Look for:
+- Emails, phones, SSN, credit cards, addresses
+- API keys, passwords, credentials
+- Passport, I-94, driver license numbers
+- References to photos, images, faces, or people
+- Mentions like "photo attached", "see image", "person in video", "face visible"
+
 Document:
 ${truncatedText}`;
 
@@ -175,9 +187,23 @@ ${truncatedText}`;
 
     try {
       const parsed = JSON.parse(clean);
+      console.log("Parsed AI result successfully");
       return parsed;
     } catch (parseErr) {
       console.error("Error parsing AI response:", parseErr.message);
+      console.error("Attempting to extract JSON from response...");
+      
+      // Try to extract JSON from response
+      const jsonMatch = clean.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const extracted = JSON.parse(jsonMatch[0]);
+          console.log("Successfully extracted JSON");
+          return extracted;
+        } catch (e) {
+          console.error("Failed to extract JSON");
+        }
+      }
       return null;
     }
 
@@ -231,14 +257,29 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
         const { data: { text: ocrText } } = await Tesseract.recognize(file.path, 'eng');
         text = ocrText;
       }
-      else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
+      else if ((['.png', '.jpg', '.jpeg'].includes(ext) || file.mimetype?.startsWith('image/')) && !Tesseract) {
+        console.log("Processing image with Python OCR...");
+        try {
+          const { stdout } = await execPromise(`python3 python_scanner.py "${file.path}" "${ext.slice(1)}"`);
+          const result = JSON.parse(stdout);
+          if (result.success) text = result.text;
+        } catch (e) {
+          console.error('Python OCR failed:', e.message);
+        }
+      }
+      else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx', '.tex', '.latex'].includes(ext)) {
         text = readUtf8(file.path);
       } 
       else {
+        // Try reading as text for unknown types
+        console.log(`Unknown file type ${ext}, attempting text read...`);
         text = readUtf8(file.path);
       }
     } catch (parseError) {
       console.error("Error parsing file:", parseError);
+      console.error("File path:", file.path);
+      console.error("File extension:", ext);
+      console.error("File mimetype:", file.mimetype);
       text = "";
     }
 
@@ -321,6 +362,28 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     });
 
     // ----------------------
+    // Face Detection
+    // ----------------------
+    if (['.jpg', '.jpeg', '.png', '.pdf'].includes(ext)) {
+      try {
+        const { stdout } = await execPromise(`python3 face_detector.py "${file.path}" "${ext.slice(1)}"`);
+        const faceResult = JSON.parse(stdout);
+        if (faceResult.success && faceResult.faces_detected > 0) {
+          findings.push({
+            type: 'faceDetection',
+            severity: 'HIGH',
+            content: faceResult.message,
+            fullMatch: '',
+            confidence: 90
+          });
+          riskScore += 20;
+        }
+      } catch (e) {
+        console.log('Face detection failed:', e.message);
+      }
+    }
+
+    // ----------------------
     // Gemini AI scan
     // ----------------------
     console.log('Starting AI scan...');
@@ -372,14 +435,27 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     if (scanHistory.length > 100) scanHistory.pop();
     saveHistory();
 
+    // Generate audio alert if high risk
+    if (finalRiskLevel === 'CRITICAL' || finalRiskLevel === 'HIGH') {
+      try {
+        const totalFindings = findings.length + aiIssues.length;
+        const { stdout } = await execPromise(`python3 audio_alert.py "${finalRiskLevel}" ${totalFindings}`);
+        const audioResult = JSON.parse(stdout);
+        if (audioResult.success) {
+          scanResult.audioAlert = audioResult.audio_path;
+        }
+      } catch (e) {
+        console.log('Audio alert generation failed:', e.message);
+      }
+    }
+
+    res.json(scanResult);
+
     // Cache the result
     await cacheScan(fileHash, scanResult);
 
     // Clean up uploaded file
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-
-    res.json(scanResult);
-
     // Send email after response (non-blocking)
     console.log('🔍 Email check:');
     console.log('  emailTransporter:', emailTransporter ? 'EXISTS' : 'NULL');

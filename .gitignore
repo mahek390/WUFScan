@@ -2,6 +2,7 @@ node_modules/
 uploads/
 scan-history.json
 .env
+.env.example
 .DS_Store
 *.log
 client/build/
