@@ -154,27 +154,44 @@ async function runGeminiScan(text) {
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
-    const prompt = `
-Extract ALL sensitive data from this document and return a JSON as specified:
+        const prompt = `
+### ROLE: LEAD CYBERSECURITY AUDITOR
+### MISSION: DATA LOSS PREVENTION (DLP) ANALYSIS
+
+Analyze the following content extracted from a user's file. Your goal is to identify PII (Personally Identifiable Information), SPII (Sensitive PII), and technical secrets that could lead to a data breach or privacy violation.
+
+---
+### ANALYSIS HIERARCHY:
+1. **CRITICAL (100):** SSNs, Passports, Private Keys (.pem), Hardcoded API Keys, Passwords.
+2. **HIGH (75):** Driver's Licenses, Financial accounts, Faces/Portraits, Legal documents.
+3. **MEDIUM (40):** Emails, Phone numbers, Physical addresses, Internal project codenames.
+4. **LOW (10):** General signatures or public contact info.
+
+---
+### MULTIMODAL DETECTION INSTRUCTIONS:
+- If the text implies visual content (e.g., "Screen recording", "Passport photo", "Visible ID"), flag as "Face/Photo" or "Credential Visual".
+- If the text is a transcript (e.g., "Speaker 1 says"), check for verbal leaks of secrets.
+- Check for "Leaked Context" (e.g., an API key in a code comment or a password in a .env template).
+- "VISUAL_FACE": If the description mentions a face, portrait, or person.
+- "VISUAL_ID": If the description mentions a card, license, or passport.
+- "VERBAL_PII": If the transcript contains names, addresses, or sensitive verbal data.
+
+### OUTPUT FORMAT (STRICT JSON):
 {
-  "riskScore": <total points, max 100>,
-  "summary": "Found X emails, Y phones, Z SSNs, etc.",
+  "riskScore": <integer 0-100 based on the highest severity issue found>,
+  "summary": "A concise executive summary of the leak footprint.",
   "issues": [
-    {"type": "Email", "severity": "MEDIUM", "description": "Found email: example@domain.com"},
-    {"type": "Phone", "severity": "MEDIUM", "description": "Found phone: 123-456-7890"},
-    {"type": "SSN", "severity": "CRITICAL", "description": "Found SSN: XXX-XX-1234"},
-    {"type": "Face/Photo", "severity": "HIGH", "description": "Document contains photo of person or face"}
+    {
+      "type": "Specific Type (e.g., AWS_KEY, SSN, VERBAL_CREDENTIAL, VISUAL_ID)",
+      "severity": "CRITICAL | HIGH | MEDIUM | LOW",
+      "description": "Exact text found and why it is a risk.",
+      "remediation": "Brief advice on how to fix this (e.g., Rotate the key, Redact the image)."
+    }
   ]
 }
 
-Look for:
-- Emails, phones, SSN, credit cards, addresses
-- API keys, passwords, credentials
-- Passport, I-94, driver license numbers
-- References to photos, images, faces, or people
-- Mentions like "photo attached", "see image", "person in video", "face visible"
-
-Document:
+---
+### DOCUMENT CONTENT:
 ${truncatedText}`;
 
     const result = await model.generateContent(prompt);
@@ -364,6 +381,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     // ----------------------
     // Face Detection
     // ----------------------
+    let faceDetectionInfo = '';
     if (['.jpg', '.jpeg', '.png', '.pdf'].includes(ext)) {
       try {
         const { stdout } = await execPromise(`python3 face_detector.py "${file.path}" "${ext.slice(1)}"`);
@@ -377,6 +395,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
             confidence: 90
           });
           riskScore += 20;
+          faceDetectionInfo = `\n\n[FACE DETECTION ALERT: ${faceResult.message}]`;
         }
       } catch (e) {
         console.log('Face detection failed:', e.message);
@@ -387,7 +406,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     // Gemini AI scan
     // ----------------------
     console.log('Starting AI scan...');
-    const aiResult = await runGeminiScan(text);
+    const aiResult = await runGeminiScan(text + (faceDetectionInfo || ''));
     
     // ----------------------
     // Combine Results
@@ -399,15 +418,17 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
 
     if (aiResult) {
       console.log('AI Result Summary:', aiResult.summary);
+      console.log('AI Risk Score:', aiResult.riskScore);
       aiScore = aiResult.riskScore || 0;
       finalRiskScore = Math.min(
         100,
-        Math.round(riskScore * 0.6 + aiScore * 0.4)
+        Math.round((riskScore * 0.6) + (aiScore * 0.4))
       );
       aiSummary = aiResult.summary;
       aiIssues = aiResult.issues || [];
     } else {
       console.log('AI Result: null (Using Regex only)');
+      finalRiskScore = Math.min(riskScore, 100);
     }
 
     let finalRiskLevel = 'LOW';
@@ -572,4 +593,59 @@ app.post('/api/extension-scan', (req, res) => {
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🕵️ DataGuardian server running on port ${PORT}`);
+});
+
+// Download redacted document endpoint
+app.post('/api/download-redacted', express.json(), async (req, res) => {
+  try {
+    const { redactedText, originalFilename, fileType } = req.body;
+    
+    if (!redactedText || redactedText.trim().length === 0) {
+      return res.status(400).json({ error: 'No redacted text provided' });
+    }
+
+    if (!originalFilename) {
+      return res.status(400).json({ error: 'Original filename is missing' });
+    }
+    
+    if (fileType === 'pdf') {
+      const { PDFDocument, StandardFonts } = require('pdf-lib');
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Courier);
+      
+      const lines = redactedText.split('\n');
+      const linesPerPage = 50;
+      
+      for (let i = 0; i < lines.length; i += linesPerPage) {
+        const page = pdfDoc.addPage([600, 800]);
+        const { height } = page.getSize();
+        const pageLines = lines.slice(i, i + linesPerPage);
+        
+        pageLines.forEach((line, index) => {
+          page.drawText(line.substring(0, 80), {
+            x: 50,
+            y: height - 50 - (index * 14),
+            size: 10,
+            font
+          });
+        });
+      }
+      
+      const pdfBytes = await pdfDoc.save();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
+      res.send(Buffer.from(pdfBytes));
+    } else {
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
+      res.send(redactedText);
+    }
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ 
+      error: 'Download failed', 
+      details: error.message,
+      hint: 'Ensure pdf-lib is installed: npm install pdf-lib'
+    });
+  }
 });

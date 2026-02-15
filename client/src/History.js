@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Clock, AlertTriangle, CheckCircle, FileText, TrendingUp } from 'lucide-react';
 import './History.css';
 
-function History() {
+function History({ onViewScan }) {
   const [scans, setScans] = useState([]);
   const [filter, setFilter] = useState('all');
 
@@ -66,11 +66,11 @@ function History() {
       </div>
 
       <div className="filter-bar">
-        <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
-        <button className={filter === 'CRITICAL' ? 'active' : ''} onClick={() => setFilter('CRITICAL')}>Critical</button>
-        <button className={filter === 'HIGH' ? 'active' : ''} onClick={() => setFilter('HIGH')}>High</button>
-        <button className={filter === 'MEDIUM' ? 'active' : ''} onClick={() => setFilter('MEDIUM')}>Medium</button>
-        <button className={filter === 'LOW' ? 'active' : ''} onClick={() => setFilter('LOW')}>Low</button>
+        <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All ({scans.length})</button>
+        <button className={filter === 'CRITICAL' ? 'active' : ''} onClick={() => setFilter('CRITICAL')}>Critical ({stats.critical})</button>
+        <button className={filter === 'HIGH' ? 'active' : ''} onClick={() => setFilter('HIGH')}>High ({scans.filter(s => s.riskLevel === 'HIGH').length})</button>
+        <button className={filter === 'MEDIUM' ? 'active' : ''} onClick={() => setFilter('MEDIUM')}>Medium ({scans.filter(s => s.riskLevel === 'MEDIUM').length})</button>
+        <button className={filter === 'LOW' ? 'active' : ''} onClick={() => setFilter('LOW')}>Low ({scans.filter(s => s.riskLevel === 'LOW').length})</button>
       </div>
 
       <div className="scans-list">
@@ -82,7 +82,12 @@ function History() {
           </div>
         ) : (
           filteredScans.map(scan => (
-            <div key={scan.id} className={`scan-card risk-${scan.riskLevel.toLowerCase()}`}>
+            <div 
+              key={scan.id} 
+              className={`scan-card risk-${scan.riskLevel.toLowerCase()}`}
+              onClick={() => onViewScan(scan)}
+              style={{ cursor: 'pointer' }}
+            >
               <div className="scan-header">
                 <div className="scan-info">
                   <FileText size={20} />

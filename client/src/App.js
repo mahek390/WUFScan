@@ -14,6 +14,21 @@ function App() {
   const [redactionStyle, setRedactionStyle] = useState('full');
   const [showPreview, setShowPreview] = useState(false);
   const [redactedText, setRedactedText] = useState('');
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'noir');
+
+  useEffect(() => {
+    document.body.className = theme;
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const handleViewScan = (scan) => {
+    setResults(scan);
+    setActiveTab('scanner');
+    setFile(null);
+    setSelectedFindings(scan.regexFindings?.map((_, i) => i) || []);
+    setFileText(scan.extractedText || '');
+    window.scrollTo(0, 0);
+  };
   const [originalFile, setOriginalFile] = useState(null);
   const [notificationEmail, setNotificationEmail] = useState('');
   const [wantsNotification, setWantsNotification] = useState(false);
@@ -85,8 +100,17 @@ function App() {
 
   // Handle Redaction Request
   const handleRedact = async () => {
-    // Filter only the findings the user selected
     const findingsToRedact = results.regexFindings.filter((_, i) => selectedFindings.includes(i));
+    
+    if (findingsToRedact.length === 0) {
+      alert('Please select at least one finding to redact.');
+      return;
+    }
+
+    if (!fileText || fileText.trim().length === 0) {
+      alert('No text available to redact. The file may be empty or unsupported.');
+      return;
+    }
     
     try {
       const response = await axios.post('http://localhost:5001/api/redact', {
@@ -99,12 +123,23 @@ function App() {
       setShowPreview(true);
     } catch (error) {
       console.error('Redaction failed:', error);
-      alert('Could not generate redacted text.');
+      const errorMsg = error.response?.data?.error || error.message;
+      alert(`Redaction Failed: ${errorMsg}\n\nPossible causes:\n- Server is not running\n- Text extraction failed\n- Invalid redaction style`);
     }
   };
 
   // Handle Download Redacted Document
   const handleDownload = async () => {
+    if (!redactedText || redactedText.trim().length === 0) {
+      alert('No redacted text available. Please generate redacted document first.');
+      return;
+    }
+
+    if (!originalFile) {
+      alert('Original file information is missing. Please scan a file first.');
+      return;
+    }
+
     try {
       const fileExt = originalFile.name.split('.').pop().toLowerCase();
       let fileType = 'text';
@@ -117,9 +152,14 @@ function App() {
         originalFilename: originalFile.name,
         fileType: fileType
       }, {
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: 30000
       });
       
+      if (!response.data || response.data.size === 0) {
+        throw new Error('Server returned empty file');
+      }
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -127,9 +167,26 @@ function App() {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      alert('✓ Redacted document downloaded successfully!');
     } catch (error) {
       console.error('Download failed:', error);
-      alert('Could not download redacted document.');
+      let errorMsg = 'Unknown error occurred';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMsg = 'Download timeout - file may be too large';
+      } else if (error.response?.status === 500) {
+        errorMsg = 'Server error generating file';
+      } else if (error.response?.status === 404) {
+        errorMsg = 'Download endpoint not found';
+      } else if (!navigator.onLine) {
+        errorMsg = 'No internet connection';
+      } else {
+        errorMsg = error.message || 'Failed to generate download';
+      }
+      
+      alert(`Download Failed: ${errorMsg}\n\nTroubleshooting:\n- Check if server is running on port 5001\n- Verify pdf-lib is installed (npm install pdf-lib)\n- Try a smaller file\n- Check browser console for details`);
     }
   };
 
@@ -210,6 +267,13 @@ function App() {
             >
               <Clock size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
               History
+            </button>
+            <button 
+              className="theme-toggle"
+              onClick={() => setTheme(theme === 'noir' ? 'cyber' : theme === 'cyber' ? 'light' : 'noir')}
+              title="Switch Theme"
+            >
+              {theme === 'noir' ? '🌙' : theme === 'cyber' ? '⚡' : '☀️'}
             </button>
           </div>
           <p className="tagline">"Your Last Line of Defense Before You Hit Send"</p>
@@ -454,7 +518,7 @@ function App() {
           )}
         </main>
       ) : (
-        <History />
+        <History onViewScan={handleViewScan} />
       )}
     </div>
   );
