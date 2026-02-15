@@ -570,3 +570,35 @@
     gap: 1.5rem;
   }
 }
+
+
+/* Icon buttons */
+.icon-btn {
+  background: transparent;
+  border: 1px solid #555;
+  color: #999;
+  padding: 0.4rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: #777;
+}
+
+.delete-btn:hover {
+  background: rgba(255,0,0,0.1);
+  border-color: #ff4444;
+  color: #ff4444;
+}
+
+.reupload-btn:hover {
+  background: rgba(212,175,55,0.1);
+  border-color: #d4af37;
+  color: #d4af37;
+}
