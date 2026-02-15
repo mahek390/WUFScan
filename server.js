@@ -80,8 +80,10 @@ app.use(express.json());
 // Persistent History Setup
 // ----------------------
 const HISTORY_FILE = path.join(__dirname, 'scan-history.json');
+const REDACTION_STATS_FILE = path.join(__dirname, 'redaction-stats.json');
 let scanHistory = [];
 let scanIdCounter = 1;
+let redactionStats = {};
 
 if (fs.existsSync(HISTORY_FILE)) {
   try {
@@ -97,11 +99,28 @@ if (fs.existsSync(HISTORY_FILE)) {
   console.log('📝 No history file found, starting fresh');
 }
 
+if (fs.existsSync(REDACTION_STATS_FILE)) {
+  try {
+    redactionStats = JSON.parse(fs.readFileSync(REDACTION_STATS_FILE, 'utf-8'));
+    console.log(`✅ Loaded redaction stats`);
+  } catch (err) {
+    console.error('Failed to load redaction stats:', err);
+  }
+}
+
 function saveHistory() {
   try {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify({ scans: scanHistory, counter: scanIdCounter }, null, 2));
   } catch (err) {
     console.error('Failed to save history:', err);
+  }
+}
+
+function saveRedactionStats() {
+  try {
+    fs.writeFileSync(REDACTION_STATS_FILE, JSON.stringify(redactionStats, null, 2));
+  } catch (err) {
+    console.error('Failed to save redaction stats:', err);
   }
 }
 
@@ -535,6 +554,10 @@ app.post('/api/redact', express.json(), (req, res) => {
       const match = finding.fullMatch;
       let replacement;
 
+      // Track redaction stats
+      const type = finding.type;
+      redactionStats[type] = (redactionStats[type] || 0) + 1;
+
       switch (redactionStyle) {
         case 'full':
           replacement = '[REDACTED]';
@@ -555,6 +578,7 @@ app.post('/api/redact', express.json(), (req, res) => {
       redactedText = redactedText.replaceAll(match, replacement);
     });
 
+    saveRedactionStats();
     res.json({ redactedText });
   } catch (error) {
     console.error('Redaction error:', error);
@@ -627,6 +651,14 @@ app.get('/api/history', (req, res) => {
   res.json(scanHistory);
 });
 
+// Redaction stats endpoint
+app.get('/api/redaction-stats', (req, res) => {
+  const stats = Object.entries(redactionStats)
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count);
+  res.json(stats);
+});
+
 // Delete history record
 app.delete('/api/history/:id', (req, res) => {
   try {
@@ -663,63 +695,6 @@ app.post('/api/extension-scan', (req, res) => {
   } catch(e) {
     console.error("Extension scan error", e);
     res.status(500).json({ error: "Failed to save extension scan" });
-  }
-});
-
-// ----------------------
-// Download redacted document endpoint
-// ----------------------
-app.post('/api/download-redacted', express.json(), async (req, res) => {
-  try {
-    const { redactedText, originalFilename, fileType } = req.body;
-    
-    if (!redactedText || redactedText.trim().length === 0) {
-      return res.status(400).json({ error: 'No redacted text provided' });
-    }
-
-    if (!originalFilename) {
-      return res.status(400).json({ error: 'Original filename is missing' });
-    }
-    
-    if (fileType === 'pdf') {
-      const { PDFDocument, StandardFonts } = require('pdf-lib');
-      const pdfDoc = await PDFDocument.create();
-      const font = await pdfDoc.embedFont(StandardFonts.Courier);
-      
-      const lines = redactedText.split('\n');
-      const linesPerPage = 50;
-      
-      for (let i = 0; i < lines.length; i += linesPerPage) {
-        const page = pdfDoc.addPage([600, 800]);
-        const { height } = page.getSize();
-        const pageLines = lines.slice(i, i + linesPerPage);
-        
-        pageLines.forEach((line, index) => {
-          page.drawText(line.substring(0, 80), {
-            x: 50,
-            y: height - 50 - (index * 14),
-            size: 10,
-            font
-          });
-        });
-      }
-      
-      const pdfBytes = await pdfDoc.save();
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
-      res.send(Buffer.from(pdfBytes));
-    } else {
-      res.setHeader('Content-Type', 'text/plain');
-      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
-      res.send(redactedText);
-    }
-  } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ 
-      error: 'Download failed', 
-      details: error.message,
-      hint: 'Ensure pdf-lib is installed: npm install pdf-lib'
-    });
   }
 });
 
