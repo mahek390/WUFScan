@@ -9,8 +9,27 @@ function Login({ onLogin }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (username.trim()) {
-      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      onLogin({ username: username.trim(), userId });
+      // Check if user with same name exists in localStorage
+      const existingUsers = JSON.parse(localStorage.getItem('wufscan_users') || '{}');
+      const normalizedUsername = username.trim().toLowerCase();
+      
+      let userData;
+      if (existingUsers[normalizedUsername]) {
+        // Reuse existing user session
+        userData = existingUsers[normalizedUsername];
+        console.log('Returning detective:', userData.username);
+      } else {
+        // Create new user
+        userData = {
+          username: username.trim(),
+          userId: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        };
+        existingUsers[normalizedUsername] = userData;
+        localStorage.setItem('wufscan_users', JSON.stringify(existingUsers));
+        console.log('New detective registered:', userData.username);
+      }
+      
+      onLogin(userData);
     }
   };
 
@@ -43,7 +62,7 @@ function Login({ onLogin }) {
         </form>
 
         <div className="login-footer">
-          <p>🔒 All investigations are tracked per detective</p>
+          <p>🔒 Returning detectives: Enter your name to resume</p>
         </div>
       </div>
     </div>
