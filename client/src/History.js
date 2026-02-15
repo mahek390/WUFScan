@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, AlertTriangle, CheckCircle, FileText, TrendingUp } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle, FileText, TrendingUp, Trash2, Upload } from 'lucide-react';
 import './History.css';
 
 function History({ onViewScan }) {
@@ -21,6 +21,28 @@ function History({ onViewScan }) {
     } catch (error) {
       console.error('Failed to fetch history:', error);
     }
+  };
+
+  const handleDelete = async (e, scanId) => {
+    e.stopPropagation();
+    if (!window.confirm('Delete this scan record?')) return;
+    
+    try {
+      const response = await fetch(`http://localhost:5001/api/history/${scanId}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        setScans(scans.filter(s => s.id !== scanId));
+      }
+    } catch (error) {
+      console.error('Failed to delete:', error);
+      alert('Failed to delete record');
+    }
+  };
+
+  const handleReupload = (e, scan) => {
+    e.stopPropagation();
+    onViewScan({ ...scan, reupload: true });
   };
 
   const filteredScans = scans.filter(scan => 
@@ -93,9 +115,25 @@ function History({ onViewScan }) {
                   <FileText size={20} />
                   <span className="filename">{scan.filename}</span>
                 </div>
-                <span className={`risk-badge ${scan.riskLevel.toLowerCase()}`}>
-                  {scan.riskLevel}
-                </span>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <button 
+                    className="icon-btn reupload-btn"
+                    onClick={(e) => handleReupload(e, scan)}
+                    title="Re-upload and edit"
+                  >
+                    <Upload size={16} />
+                  </button>
+                  <button 
+                    className="icon-btn delete-btn"
+                    onClick={(e) => handleDelete(e, scan.id)}
+                    title="Delete record"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <span className={`risk-badge ${scan.riskLevel.toLowerCase()}`}>
+                    {scan.riskLevel}
+                  </span>
+                </div>
               </div>
               <div className="scan-details">
                 <div className="detail">
@@ -104,7 +142,7 @@ function History({ onViewScan }) {
                 </div>
                 <div className="detail">
                   <span className="label">Issues Found:</span>
-                  <span className="value">{scan.findingsCount}</span>
+                  <span className="value">{(scan.regexFindings?.length || 0) + (scan.aiFindings?.length || 0)}</span>
                 </div>
                 <div className="detail">
                   <span className="label">Scanned:</span>

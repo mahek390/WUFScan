@@ -627,6 +627,25 @@ app.get('/api/history', (req, res) => {
   res.json(scanHistory);
 });
 
+// Delete history record
+app.delete('/api/history/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const index = scanHistory.findIndex(s => s.id === id);
+    
+    if (index === -1) {
+      return res.status(404).json({ error: 'Scan not found' });
+    }
+    
+    scanHistory.splice(index, 1);
+    saveHistory();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
 // ----------------------
 // Extension scan endpoint
 // ----------------------
@@ -648,14 +667,8 @@ app.post('/api/extension-scan', (req, res) => {
 });
 
 // ----------------------
-// Start server
-// ----------------------
-const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => {
-  console.log(`🕵️ DataGuardian server running on port ${PORT}`);
-});
-
 // Download redacted document endpoint
+// ----------------------
 app.post('/api/download-redacted', express.json(), async (req, res) => {
   try {
     const { redactedText, originalFilename, fileType } = req.body;
@@ -708,4 +721,12 @@ app.post('/api/download-redacted', express.json(), async (req, res) => {
       hint: 'Ensure pdf-lib is installed: npm install pdf-lib'
     });
   }
+});
+
+// ----------------------
+// Start server
+// ----------------------
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, () => {
+  console.log(`🕵️ DataGuardian server running on port ${PORT}`);
 });
