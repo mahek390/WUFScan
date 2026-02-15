@@ -1,0 +1,7 @@
+twelvelabs
+elevenlabs
+backboard-sdk
+pillow
+opencv-python
+pytesseract
+PyMuPDF

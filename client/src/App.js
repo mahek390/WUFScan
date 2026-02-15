@@ -230,7 +230,7 @@ function App() {
               id="file-input"
               className="file-input"
               onChange={handleFileChange}
-              accept=".txt,.pdf,.doc,.docx,.yaml,.yml,.json,.env,.csv"
+              accept=".txt,.pdf,.doc,.docx,.yaml,.yml,.json,.env,.csv,.jpg,.jpeg,.png,.mp4,.py,.js,.java,.cpp,.c,.xml,.html,.tex,.latex"
             />
             
             <label htmlFor="file-input">
