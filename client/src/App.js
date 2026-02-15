@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock } from 'lucide-react';
+import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock, Download } from 'lucide-react';
 import History from './History';
 import './App.css';
 
@@ -14,6 +14,7 @@ function App() {
   const [redactionStyle, setRedactionStyle] = useState('full');
   const [showPreview, setShowPreview] = useState(false);
   const [redactedText, setRedactedText] = useState('');
+  const [originalFile, setOriginalFile] = useState(null);
   const [notificationEmail, setNotificationEmail] = useState('');
   const [wantsNotification, setWantsNotification] = useState(false);
 
@@ -27,6 +28,7 @@ function App() {
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     setFile(selectedFile);
+    setOriginalFile(selectedFile);
     setResults(null);
     setSelectedFindings([]);
     setShowPreview(false);
@@ -98,6 +100,36 @@ function App() {
     } catch (error) {
       console.error('Redaction failed:', error);
       alert('Could not generate redacted text.');
+    }
+  };
+
+  // Handle Download Redacted Document
+  const handleDownload = async () => {
+    try {
+      const fileExt = originalFile.name.split('.').pop().toLowerCase();
+      let fileType = 'text';
+      
+      if (fileExt === 'pdf') fileType = 'pdf';
+      else if (fileExt === 'docx') fileType = 'docx';
+      
+      const response = await axios.post('http://localhost:5000/api/download-redacted', {
+        redactedText: redactedText,
+        originalFilename: originalFile.name,
+        fileType: fileType
+      }, {
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `redacted_${originalFile.name}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Could not download redacted document.');
     }
   };
 
@@ -395,7 +427,13 @@ function App() {
 
               {showPreview && (
                 <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#1a1a1a', borderRadius: '8px' }}>
-                  <h3 style={{ marginBottom: '1rem' }}>Redacted Document Preview</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3>Redacted Document Preview</h3>
+                    <button className="upload-btn" onClick={handleDownload} style={{ padding: '0.5rem 1rem' }}>
+                      <Download size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+                      Download Redacted Document
+                    </button>
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
                       <h4 style={{ color: '#999', marginBottom: '0.5rem' }}>Original</h4>
