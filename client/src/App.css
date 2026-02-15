@@ -621,13 +621,13 @@ body::after {
   cursor: pointer;
   border-radius: 0.375rem;
   font-size: 1.25rem;
-  transition: all 0.2s;
+  transition: all 0.3s;
 }
 
 .theme-toggle:hover {
   background: rgba(205, 164, 94, 0.1);
   border-color: var(--noir-gold);
-  transform: rotate(15deg);
+  transform: scale(1.1);
 }
 
 /* Responsive */

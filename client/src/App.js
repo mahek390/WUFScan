@@ -15,15 +15,9 @@ function App() {
   const [redactionStyle, setRedactionStyle] = useState('full');
   const [showPreview, setShowPreview] = useState(false);
   const [redactedText, setRedactedText] = useState('');
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'noir');
   const [originalFile, setOriginalFile] = useState(null);
   const [notificationEmail, setNotificationEmail] = useState('');
   const [wantsNotification, setWantsNotification] = useState(false);
-
-  useEffect(() => {
-    document.body.className = theme;
-    localStorage.setItem('theme', theme);
-  }, [theme]);
 
   const handleViewScan = (scan) => {
     setResults(scan);
@@ -310,13 +304,6 @@ function App() {
             >
               <Clock size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
               Archive
-            </button>
-            <button 
-              className="theme-toggle"
-              onClick={() => setTheme(theme === 'noir' ? 'cyber' : theme === 'cyber' ? 'light' : 'noir')}
-              title="Switch Theme"
-            >
-              {theme === 'noir' ? '🌙' : theme === 'cyber' ? '⚡' : '☀️'}
             </button>
           </div>
           

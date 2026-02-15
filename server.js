@@ -11,6 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const pdfParse = require('pdf-parse');
+const { PDFDocument, rgb } = require('pdf-lib');
+const { Document, Paragraph, TextRun, Packer } = require('docx');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { exec } = require('child_process');
 const util = require('util');
@@ -557,6 +559,64 @@ app.post('/api/redact', express.json(), (req, res) => {
   } catch (error) {
     console.error('Redaction error:', error);
     res.status(500).json({ error: 'Redaction failed' });
+  }
+});
+
+// Download redacted document endpoint
+app.post('/api/download-redacted', express.json({ limit: '50mb' }), async (req, res) => {
+  try {
+    const { redactedText, originalFilename, fileType } = req.body;
+
+    if (fileType === 'pdf') {
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([612, 792]);
+      const { height } = page.getSize();
+      
+      const lines = redactedText.split('\n');
+      let yPosition = height - 50;
+      
+      lines.forEach(line => {
+        if (yPosition < 50) {
+          const newPage = pdfDoc.addPage([612, 792]);
+          yPosition = newPage.getSize().height - 50;
+        }
+        page.drawText(line.substring(0, 100), {
+          x: 50,
+          y: yPosition,
+          size: 10,
+          color: rgb(0, 0, 0)
+        });
+        yPosition -= 15;
+      });
+      
+      const pdfBytes = await pdfDoc.save();
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
+      res.send(Buffer.from(pdfBytes));
+    } else if (fileType === 'docx') {
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: redactedText.split('\n').map(line => 
+            new Paragraph({ children: [new TextRun(line)] })
+          )
+        }]
+      });
+      
+      const buffer = await Packer.toBuffer(doc);
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
+      res.send(buffer);
+    } else {
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
+      res.send(redactedText);
+    }
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Download failed', details: error.message });
   }
 });
 
