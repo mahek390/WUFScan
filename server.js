@@ -291,12 +291,9 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     if (scanHistory.length > 100) scanHistory.pop();
     saveHistory();
 
-    res.json(scanResult);
-
     // Clean up uploaded file
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
-<<<<<<< HEAD
     res.json(scanResult);
 
     // Send email after response (non-blocking)
@@ -318,9 +315,6 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
         console.error('❌ Email send failed:', e.message);
       });
     }
-
-=======
->>>>>>> 4c45e7502b8060c4c3309cf7a497bd0e5a8c7c7c
   } catch (error) {
     console.error('Scan error:', error);
     console.error('Error stack:', error.stack);
