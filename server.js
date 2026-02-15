@@ -20,10 +20,28 @@ try { mammoth = require('mammoth'); } catch (e) {}
 try { XLSX = require('xlsx'); } catch (e) {}
 try { Tesseract = require('tesseract.js'); } catch (e) {}
 
+// Optional nodemailer
+let nodemailer;
+try { nodemailer = require('nodemailer'); } catch (e) {}
+
 // ----------------------
 // Initialize Gemini AI
 // ----------------------
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// ----------------------
+// Email Setup
+// ----------------------
+let emailTransporter = null;
+if (process.env.EMAIL_ENABLED === 'true' && nodemailer) {
+  try {
+    emailTransporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE,
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+    });
+    console.log('📧 Email notifications enabled');
+  } catch (e) {}
+}
 
 // ----------------------
 // Express app & multer
@@ -138,6 +156,8 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const userEmail = req.headers['x-notification-email'];
 
     let text = '';
     const ext = path.extname(file.originalname || '').toLowerCase();
@@ -274,6 +294,26 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
     res.json(scanResult);
+
+    // Send email after response (non-blocking)
+    if (emailTransporter && userEmail) {
+      console.log(`📧 Attempting to send email to: ${userEmail}`);
+      emailTransporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: userEmail,
+        subject: `🚨 DataGuardian Alert: ${scanResult.riskLevel} Risk - ${scanResult.filename}`,
+        html: `<h2>🕵️ Sensitive Data Detected</h2>
+               <p><b>File:</b> ${scanResult.filename}</p>
+               <p><b>Risk Score:</b> ${scanResult.riskScore}/100</p>
+               <p><b>Risk Level:</b> ${scanResult.riskLevel}</p>
+               <p><b>Findings:</b> ${scanResult.regexFindings.length} issues</p>
+               <p><b>Time:</b> ${new Date(scanResult.timestamp).toLocaleString()}</p>`
+      }).then(() => {
+        console.log(`✅ Email sent successfully to ${userEmail}`);
+      }).catch(e => {
+        console.error('❌ Email send failed:', e.message);
+      });
+    }
 
   } catch (error) {
     console.error('Scan error:', error);
