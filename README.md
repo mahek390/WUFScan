@@ -1,5 +1,5 @@
 
-# 🕵️ DataGuardian
+# WufScan
 
 **"Your Last Line of Defense Before You Hit Send"**
 
@@ -123,7 +123,7 @@ WufScan/
 
 ---
 
-## 📝 Next Steps
+## 📝 Future Implementations
 
 1. Advanced automatic redaction
 2. Team and organization dashboards
