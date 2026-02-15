@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock, Download } from 'lucide-react';
+import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock, Download, BarChart3 } from 'lucide-react';
 import History from './History';
+import Dashboard from './Dashboard';
 import './App.css';
 
 function App() {
@@ -299,6 +300,13 @@ function App() {
               New Case
             </button>
             <button 
+              className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+              onClick={() => setActiveTab('dashboard')}
+            >
+              <BarChart3 size={16} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+              Dashboard
+            </button>
+            <button 
               className={`nav-tab ${activeTab === 'history' ? 'active' : ''}`}
               onClick={() => setActiveTab('history')}
             >
@@ -402,7 +410,6 @@ function App() {
               id="file-input"
               className="file-input"
               onChange={handleFileChange}
-              accept=".txt,.pdf,.doc,.docx,.yaml,.yml,.json,.env,.csv,.jpg,.jpeg,.png,.mp4,.py,.js,.java,.cpp,.c,.xml,.html,.tex,.latex"
             />
             
             <label htmlFor="file-input">
@@ -413,7 +420,7 @@ function App() {
             </label>
 
             <div style={{ marginTop: '1.5rem', color: '#6a6a60', fontSize: '0.875rem', letterSpacing: '0.05em' }}>
-              Accepted: .TXT, .PDF, .DOCX, .CSV
+              All file formats supported
             </div>
 
             {file && (
@@ -687,6 +694,8 @@ function App() {
             </section>
           )}
         </main>
+      ) : activeTab === 'dashboard' ? (
+        <Dashboard />
       ) : (
         <History onViewScan={handleViewScan} />
       )}
