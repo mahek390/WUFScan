@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock, Download, BarChart3 } from 'lucide-react';
+import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock, Download, BarChart3, LogOut, User } from 'lucide-react';
 import History from './History';
 import Dashboard from './Dashboard';
+import Login from './Login';
 import './App.css';
 
 function App() {
+  const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('scanner');
   const [file, setFile] = useState(null);
   const [fileText, setFileText] = useState('');
@@ -37,11 +39,27 @@ function App() {
   };
 
   useEffect(() => {
+    const savedUser = localStorage.getItem('wufscan_user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
     const hash = window.location.hash;
     if (hash === '#history') {
       setActiveTab('history');
     }
   }, []);
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+    localStorage.setItem('wufscan_user', JSON.stringify(userData));
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('wufscan_user');
+    setResults(null);
+    setFile(null);
+  };
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -72,7 +90,11 @@ function App() {
 
     try {
       const response = await axios.post('http://localhost:5001/api/scan', formData, {
-        headers: { 'X-Notification-Email': wantsNotification ? notificationEmail : '' }
+        headers: { 
+          'X-Notification-Email': wantsNotification ? notificationEmail : '',
+          'X-User-Id': user?.userId || 'anonymous',
+          'X-Username': user?.username || 'Anonymous'
+        }
       });
       setResults(response.data);
       const types = new Set(response.data.regexFindings.map(f => f.type));
@@ -250,6 +272,10 @@ function App() {
   const aiSummary = results?.aiSummary || null;
   const aiFindings = results?.aiFindings || [];
 
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <div className="app">
       {/* Crime Scene Tape */}
@@ -317,30 +343,59 @@ function App() {
           
           <div style={{
             marginLeft: 'auto',
-            padding: '0.5rem 1rem',
-            background: 'rgba(205, 164, 94, 0.1)',
-            border: '1px solid #cda45e',
-            borderRadius: '0.375rem',
             display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end'
+            alignItems: 'center',
+            gap: '1rem'
           }}>
             <div style={{
-              fontSize: '0.625rem',
-              color: '#6a6a60',
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase'
+              padding: '0.5rem 1rem',
+              background: 'rgba(168, 168, 160, 0.1)',
+              border: '1px solid #6a6a60',
+              borderRadius: '0.375rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
             }}>
-              Case Officer
+              <User size={16} style={{ color: '#a8a8a0' }} />
+              <div>
+                <div style={{
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  color: '#a8a8a0',
+                  fontFamily: "'Courier Prime', monospace"
+                }}>
+                  {user.username}
+                </div>
+              </div>
             </div>
-            <div style={{
-              fontSize: '1rem',
-              fontWeight: 700,
-              color: '#cda45e',
-              fontFamily: "'Courier Prime', monospace"
-            }}>
-              #4729
-            </div>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '0.5rem 1rem',
+                background: 'transparent',
+                border: '1px solid #6a6a60',
+                borderRadius: '0.375rem',
+                color: '#a8a8a0',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.875rem',
+                fontFamily: "'Courier Prime', monospace",
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(168, 168, 160, 0.1)';
+                e.target.style.borderColor = '#a8a8a0';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'transparent';
+                e.target.style.borderColor = '#6a6a60';
+              }}
+            >
+              <LogOut size={16} />
+              Exit
+            </button>
           </div>
         </div>
       </header>

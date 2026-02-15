@@ -19,7 +19,10 @@ function Dashboard() {
 
   const fetchHistory = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/history');
+      const user = JSON.parse(localStorage.getItem('wufscan_user') || '{}');
+      const response = await fetch('http://localhost:5001/api/history', {
+        headers: { 'X-User-Id': user.userId || 'anonymous' }
+      });
       const data = await response.json();
       setScans(data);
     } catch (error) {
@@ -29,7 +32,10 @@ function Dashboard() {
 
   const fetchRedactionStats = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/redaction-stats');
+      const user = JSON.parse(localStorage.getItem('wufscan_user') || '{}');
+      const response = await fetch('http://localhost:5001/api/redaction-stats', {
+        headers: { 'X-User-Id': user.userId || 'anonymous' }
+      });
       const data = await response.json();
       setRedactionStats(data);
     } catch (error) {
@@ -99,7 +105,7 @@ function Dashboard() {
           <BarChart3 size={40} />
           <div>
             <h1>Intelligence Dashboard</h1>
-            <p className="subtitle">Threat Analysis & Statistics</p>
+            <p className="subtitle">Your Personal Threat Analysis</p>
           </div>
         </div>
         <div className="time-filter">
