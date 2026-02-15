@@ -14,7 +14,10 @@ function History({ onViewScan }) {
 
   const fetchHistory = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/history');
+      const user = JSON.parse(localStorage.getItem('wufscan_user') || '{}');
+      const response = await fetch('http://localhost:5001/api/history', {
+        headers: { 'X-User-Id': user.userId || 'anonymous' }
+      });
       const data = await response.json();
       console.log('Fetched history:', data.length, 'scans');
       setScans(data);
@@ -114,6 +117,15 @@ function History({ onViewScan }) {
                 <div className="scan-info">
                   <FileText size={20} />
                   <span className="filename">{scan.filename}</span>
+                  {scan.username && (
+                    <span style={{ 
+                      fontSize: '0.75rem', 
+                      color: '#6a6a60',
+                      marginLeft: '0.5rem'
+                    }}>
+                      by {scan.username}
+                    </span>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <button 
