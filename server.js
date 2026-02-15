@@ -15,12 +15,11 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const Redis = require('ioredis');
 
 // Optional dependencies (for extended file support)
-// These are required inside the route to prevent crash if not installed, 
-// but recommended to install via: npm install mammoth xlsx tesseract.js
-let mammoth, XLSX, Tesseract;
+let mammoth, XLSX, Tesseract, nodemailer;
 try { mammoth = require('mammoth'); } catch (e) {}
 try { XLSX = require('xlsx'); } catch (e) {}
 try { Tesseract = require('tesseract.js'); } catch (e) {}
+try { nodemailer = require('nodemailer'); } catch (e) {}
 
 // ----------------------
 // Initialize Gemini AI & Valkey
@@ -35,6 +34,30 @@ const redis = new Redis({
 
 redis.on('error', () => console.log('⚠️ Valkey unavailable'));
 redis.on('connect', () => console.log('✅ Valkey connected'));
+
+// ----------------------
+// Email Setup
+// ----------------------
+let emailTransporter = null;
+console.log('🔍 Email config check:');
+console.log('  EMAIL_ENABLED:', process.env.EMAIL_ENABLED);
+console.log('  EMAIL_USER:', process.env.EMAIL_USER);
+console.log('  EMAIL_PASS:', process.env.EMAIL_PASS ? '***set***' : 'NOT SET');
+console.log('  nodemailer:', nodemailer ? 'loaded' : 'NOT LOADED');
+
+if (process.env.EMAIL_ENABLED === 'true' && nodemailer) {
+  try {
+    emailTransporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE,
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+    });
+    console.log('✅ Email notifications enabled');
+  } catch (e) {
+    console.error('❌ Email setup failed:', e.message);
+  }
+} else {
+  console.log('⚠️ Email notifications disabled');
+}
 
 // ----------------------
 // Express app & multer
@@ -55,7 +78,6 @@ const HISTORY_FILE = path.join(__dirname, 'scan-history.json');
 let scanHistory = [];
 let scanIdCounter = 1;
 
-// Load history from file on startup
 if (fs.existsSync(HISTORY_FILE)) {
   try {
     const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
@@ -70,7 +92,6 @@ if (fs.existsSync(HISTORY_FILE)) {
   console.log('📝 No history file found, starting fresh');
 }
 
-// Save history to file
 function saveHistory() {
   try {
     fs.writeFileSync(HISTORY_FILE, JSON.stringify({ scans: scanHistory, counter: scanIdCounter }, null, 2));
@@ -79,6 +100,9 @@ function saveHistory() {
   }
 }
 
+// ----------------------
+// Valkey Cache Functions
+// ----------------------
 function calculateHash(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
@@ -125,7 +149,6 @@ async function runGeminiScan(text) {
     const truncatedText = text.slice(0, 30000);
     console.log("Sending to Gemini, text length:", truncatedText.length);
 
-    // Using gemini-2.0-flash-lite as confirmed available
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
     const prompt = `
@@ -175,6 +198,8 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
+    const userEmail = req.headers['x-notification-email'];
+
     let text = '';
     const ext = path.extname(file.originalname || '').toLowerCase();
     const readUtf8 = p => fs.readFileSync(p, 'utf-8');
@@ -222,12 +247,44 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
        return res.status(400).json({ error: 'Could not extract text from file. Format may not be supported.' });
     }
 
+    // ----------------------
+    // Valkey Cache Check
+    // ----------------------
     const fileHash = calculateHash(text);
     console.log('📄 File hash:', fileHash.substring(0, 16) + '...');
 
     const cachedResult = await getCachedScan(fileHash);
     if (cachedResult) {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      
+      // Send email for cached results too
+      console.log('🔍 Email check (cached):');
+      console.log('  emailTransporter:', emailTransporter ? 'EXISTS' : 'NULL');
+      console.log('  userEmail:', userEmail || 'NOT PROVIDED');
+      
+      if (emailTransporter && userEmail) {
+        console.log(`📧 Attempting to send email to: ${userEmail}`);
+        emailTransporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: userEmail,
+          subject: `🚨 DataGuardian Alert: ${cachedResult.riskLevel} Risk - ${file.originalname}`,
+          html: `<h2>🕵️ Sensitive Data Detected (Cached Result)</h2>
+                 <p><b>File:</b> ${file.originalname}</p>
+                 <p><b>Risk Score:</b> ${cachedResult.riskScore}/100</p>
+                 <p><b>Risk Level:</b> ${cachedResult.riskLevel}</p>
+                 <p><b>Findings:</b> ${cachedResult.regexFindings.length} issues</p>
+                 <p><b>Time:</b> ${new Date().toLocaleString()}</p>`
+        }).then(() => {
+          console.log(`✅ Email sent successfully to ${userEmail}`);
+        }).catch(e => {
+          console.error('❌ Email send failed:', e.message);
+          console.error('Full error:', e);
+        });
+      } else {
+        if (!emailTransporter) console.log('⚠️ Email not sent: transporter not configured');
+        if (!userEmail) console.log('⚠️ Email not sent: no email address provided');
+      }
+      
       return res.json({ ...cachedResult, cached: true });
     }
 
@@ -254,7 +311,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
             type,
             severity,
             content: match.substring(0, 4) + '...' + match.substring(match.length - 4),
-            fullMatch: match, // Needed for redaction
+            fullMatch: match,
             confidence: 95
           });
 
@@ -306,7 +363,7 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
       regexFindings: findings,
       aiSummary,
       aiFindings: aiIssues,
-      extractedText: text.substring(0, 50000), // Send extracted text for preview
+      extractedText: text.substring(0, 50000),
       timestamp: new Date().toISOString()
     };
 
@@ -315,24 +372,48 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     if (scanHistory.length > 100) scanHistory.pop();
     saveHistory();
 
+    // Cache the result
     await cacheScan(fileHash, scanResult);
-
-    res.json(scanResult);
 
     // Clean up uploaded file
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
+    res.json(scanResult);
+
+    // Send email after response (non-blocking)
+    console.log('🔍 Email check:');
+    console.log('  emailTransporter:', emailTransporter ? 'EXISTS' : 'NULL');
+    console.log('  userEmail:', userEmail || 'NOT PROVIDED');
+    
+    if (emailTransporter && userEmail) {
+      console.log(`📧 Attempting to send email to: ${userEmail}`);
+      emailTransporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: userEmail,
+        subject: `🚨 DataGuardian Alert: ${scanResult.riskLevel} Risk - ${scanResult.filename}`,
+        html: `<h2>🕵️ Sensitive Data Detected</h2>
+               <p><b>File:</b> ${scanResult.filename}</p>
+               <p><b>Risk Score:</b> ${scanResult.riskScore}/100</p>
+               <p><b>Risk Level:</b> ${scanResult.riskLevel}</p>
+               <p><b>Findings:</b> ${scanResult.regexFindings.length} issues</p>
+               <p><b>Time:</b> ${new Date(scanResult.timestamp).toLocaleString()}</p>`
+      }).then(() => {
+        console.log(`✅ Email sent successfully to ${userEmail}`);
+      }).catch(e => {
+        console.error('❌ Email send failed:', e.message);
+        console.error('Full error:', e);
+      });
+    } else {
+      if (!emailTransporter) console.log('⚠️ Email not sent: transporter not configured');
+      if (!userEmail) console.log('⚠️ Email not sent: no email address provided');
+    }
   } catch (error) {
     console.error('Scan error:', error);
     console.error('Error stack:', error.stack);
     
-    // Clean up file if it exists
     try {
-      if (req.file && req.file.path) {
-        const fs = require('fs');
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
+      if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
       }
     } catch (cleanupError) {
       console.error('Cleanup error:', cleanupError);
@@ -393,7 +474,6 @@ app.get('/api/history', (req, res) => {
 // Extension scan endpoint
 // ----------------------
 app.post('/api/extension-scan', (req, res) => {
-
   try {
     const scanData = req.body;
     scanData.id = scanIdCounter++;

@@ -14,6 +14,8 @@ function App() {
   const [redactionStyle, setRedactionStyle] = useState('full');
   const [showPreview, setShowPreview] = useState(false);
   const [redactedText, setRedactedText] = useState('');
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [wantsNotification, setWantsNotification] = useState(false);
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -51,7 +53,9 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:5001/api/scan', formData);
+      const response = await axios.post('http://localhost:5001/api/scan', formData, {
+        headers: { 'X-Notification-Email': wantsNotification ? notificationEmail : '' }
+      });
       setResults(response.data);
       // Select all regex findings by default
       setSelectedFindings(response.data.regexFindings.map((_, i) => i));
@@ -209,6 +213,34 @@ function App() {
                 <p style={{ color: '#e8dcc4', marginBottom: '1rem' }}>
                   Selected: <strong>{file.name}</strong>
                 </p>
+                <div style={{ marginBottom: '1rem', padding: '1rem', background: '#1a1a1a', borderRadius: '4px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: '0.75rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={wantsNotification}
+                      onChange={(e) => setWantsNotification(e.target.checked)}
+                      style={{ marginRight: '10px', cursor: 'pointer' }}
+                    />
+                    <span style={{ color: '#e8dcc4' }}>Send email notification if sensitive data is found</span>
+                  </label>
+                  {wantsNotification && (
+                    <input
+                      type="email"
+                      placeholder="Enter your email address"
+                      value={notificationEmail}
+                      onChange={(e) => setNotificationEmail(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: '#0d0d0d',
+                        border: '1px solid #333',
+                        borderRadius: '4px',
+                        color: '#e8dcc4',
+                        fontSize: '1rem'
+                      }}
+                    />
+                  )}
+                </div>
                 <button className="upload-btn" onClick={handleScan} disabled={loading}>
                   {loading ? 'Scanning...' : 'Begin Security Scan'}
                 </button>
