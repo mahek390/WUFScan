@@ -2,36 +2,128 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>DataGuardian</title>
-  <link rel="stylesheet" href="popup.css">
+  <style>
+    body {
+      width: 320px;
+      padding: 0;
+      margin: 0;
+      font-family: 'Courier New', monospace;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: #e8dcc4;
+    }
+    .header {
+      background: #0a0a0a;
+      padding: 1rem;
+      border-bottom: 3px solid #c41e3a;
+      text-align: center;
+    }
+    .logo {
+      font-size: 1.5rem;
+      font-weight: bold;
+      margin: 0;
+    }
+    .tagline {
+      font-size: 0.7rem;
+      color: #999;
+      font-style: italic;
+      margin: 0.5rem 0 0 0;
+    }
+    .content {
+      padding: 1rem;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem;
+      background: rgba(42, 42, 42, 0.9);
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+    .toggle {
+      width: 50px;
+      height: 26px;
+      background: #555;
+      border-radius: 13px;
+      position: relative;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    .toggle.active {
+      background: #c41e3a;
+    }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: 0.3s;
+    }
+    .toggle.active::after {
+      left: 27px;
+    }
+    .stats {
+      background: rgba(42, 42, 42, 0.9);
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 0.5rem 0;
+      font-size: 0.85rem;
+    }
+    .btn {
+      width: 100%;
+      padding: 0.75rem;
+      background: #c41e3a;
+      color: #e8dcc4;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+    }
+    .btn:hover {
+      background: #a01828;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-      </svg>
-      <h1>DataGuardian</h1>
+  <div class="header">
+    <h1 class="logo">🕵️ WUFScan</h1>
+    <p class="tagline">"Your Last Line of Defense"</p>
+  </div>
+  
+  <div class="content">
+    <div class="status">
+      <span>Protection Status</span>
+      <div class="toggle active" id="toggle"></div>
     </div>
     
-    <div class="tagline">"Your Last Line of Defense"</div>
-    
-    <div class="scan-section">
-      <textarea id="textInput" placeholder="Paste text to scan for sensitive data..."></textarea>
-      <button id="scanBtn" class="scan-btn">Scan Text</button>
-    </div>
-    
-    <div id="results" class="results hidden">
-      <div class="risk-display">
-        <div id="riskScore" class="risk-score">0</div>
-        <div id="riskLevel" class="risk-level">LOW</div>
+    <div class="stats">
+      <div class="stat-row">
+        <span>Files Scanned Today:</span>
+        <strong id="scanned">0</strong>
       </div>
-      <div id="findings" class="findings"></div>
+      <div class="stat-row">
+        <span>Threats Blocked:</span>
+        <strong id="blocked" style="color: #c41e3a;">0</strong>
+      </div>
+      <div class="stat-row">
+        <span>Server Status:</span>
+        <strong id="server" style="color: #2d5016;">●</strong>
+      </div>
     </div>
     
-    <div class="footer">
-      <a href="#" id="historyLink">View History</a>
-    </div>
+    <button class="btn" id="openDashboard">Open Dashboard</button>
+    <button class="btn" style="background: #2a2a2a;" id="settings">Settings</button>
   </div>
   
   <script src="popup.js"></script>

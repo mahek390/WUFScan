@@ -1,23 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "DataGuardian",
+  "name": "WUFScan - Data Leak Prevention",
   "version": "1.0.0",
-  "description": "Your Last Line of Defense Before You Hit Send",
-  "permissions": [
-    "activeTab",
-    "storage"
-  ],
-  "action": {
-    "default_popup": "popup.html"
+  "description": "Your Last Line of Defense Before You Hit Send - Scans for sensitive data before uploads",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "css": ["content.css"]
+      "run_at": "document_end"
     }
   ],
-  "background": {
-    "service_worker": "background.js"
+  "action": {
+    "default_popup": "popup.html"
   }
 }

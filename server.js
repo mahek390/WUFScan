@@ -698,6 +698,11 @@ app.post('/api/extension-scan', (req, res) => {
   }
 });
 
+// Health check endpoint for extension
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'online', timestamp: new Date().toISOString() });
+});
+
 // ----------------------
 // Start server
 // ----------------------

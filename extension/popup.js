@@ -1,94 +1,66 @@
-const patterns = {
-  awsKey: { regex: /AKIA[0-9A-Z]{16}/g, severity: 'CRITICAL', name: 'AWS API Key' },
-  apiKey: { regex: /[a-zA-Z0-9_-]{32,}/g, severity: 'HIGH', name: 'API Key' },
-  ssn: { regex: /\b\d{3}-\d{2}-\d{4}\b/g, severity: 'CRITICAL', name: 'Social Security Number' },
-  creditCard: { regex: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, severity: 'CRITICAL', name: 'Credit Card' },
-  email: { regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, severity: 'MEDIUM', name: 'Email Address' },
-  phone: { regex: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, severity: 'MEDIUM', name: 'Phone Number' },
-  ipAddress: { regex: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, severity: 'MEDIUM', name: 'IP Address' }
-};
+// WUFScan Popup Script
 
-let scanIdCounter = 1;
+let updateInterval;
 
-document.getElementById('scanBtn').addEventListener('click', scanText);
-
-function scanText() {
-  const text = document.getElementById('textInput').value;
-  if (!text.trim()) return;
-
-  const findings = [];
-  let riskScore = 0;
-
-  Object.entries(patterns).forEach(([type, config]) => {
-    const matches = text.match(config.regex);
-    if (matches) {
-      matches.forEach(match => {
-        const points = config.severity === 'CRITICAL' ? 25 : config.severity === 'HIGH' ? 15 : 10;
-        findings.push({
-          type: config.name,
-          severity: config.severity,
-          content: match.substring(0, 4) + '...' + match.substring(match.length - 4)
-        });
-        riskScore += points;
-      });
+document.addEventListener('DOMContentLoaded', async () => {
+  const toggle = document.getElementById('toggle');
+  const openDashboard = document.getElementById('openDashboard');
+  const settings = document.getElementById('settings');
+  const serverStatus = document.getElementById('server');
+  
+  // Function to update stats
+  async function updateStats() {
+    const data = await chrome.storage.sync.get(['enabled', 'scanned', 'blocked', 'serverUrl']);
+    
+    if (data.enabled) {
+      toggle.classList.add('active');
+    } else {
+      toggle.classList.remove('active');
     }
-  });
-
-  const riskLevel = riskScore > 75 ? 'CRITICAL' : riskScore > 50 ? 'HIGH' : riskScore > 25 ? 'MEDIUM' : 'LOW';
-
-  // Save to server history
-  fetch('http://localhost:5001/api/extension-scan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filename: 'Browser Extension Scan',
-      riskScore: Math.min(riskScore, 100),
-      riskLevel,
-      findings,
-      findingsCount: findings.length,
-      timestamp: new Date().toISOString()
-    })
-  }).catch(err => console.error('Failed to save scan:', err));
-
-  displayResults(Math.min(riskScore, 100), findings);
-}
-
-function displayResults(score, findings) {
-  const resultsDiv = document.getElementById('results');
-  const riskScoreEl = document.getElementById('riskScore');
-  const riskLevelEl = document.getElementById('riskLevel');
-  const findingsEl = document.getElementById('findings');
-
-  let level = 'LOW';
-  let color = '#2d5016';
-  if (score > 75) { level = 'CRITICAL'; color = '#c41e3a'; }
-  else if (score > 50) { level = 'HIGH'; color = '#cc5500'; }
-  else if (score > 25) { level = 'MEDIUM'; color = '#d4a017'; }
-
-  riskScoreEl.textContent = score + '/100';
-  riskScoreEl.style.color = color;
-  riskLevelEl.textContent = 'Threat Level: ' + level;
-  riskLevelEl.style.color = color;
-
-  findingsEl.innerHTML = '';
-  if (findings.length === 0) {
-    findingsEl.innerHTML = '<div style="text-align: center; color: #2d5016;">✓ No sensitive data detected</div>';
-  } else {
-    findings.forEach(finding => {
-      const div = document.createElement('div');
-      div.className = `finding-item ${finding.severity.toLowerCase()}`;
-      div.innerHTML = `
-        <div class="finding-type">${finding.type}</div>
-        <div class="finding-content">${finding.content}</div>
-      `;
-      findingsEl.appendChild(div);
-    });
+    
+    document.getElementById('scanned').textContent = data.scanned || 0;
+    document.getElementById('blocked').textContent = data.blocked || 0;
+    
+    // Check server status
+    try {
+      const response = await fetch(`${data.serverUrl || 'http://localhost:5001'}/api/health`);
+      if (response.ok) {
+        serverStatus.textContent = '● Online';
+        serverStatus.style.color = '#2d5016';
+      } else {
+        throw new Error('Server offline');
+      }
+    } catch (err) {
+      serverStatus.textContent = '● Offline';
+      serverStatus.style.color = '#c41e3a';
+    }
   }
+  
+  // Initial update
+  await updateStats();
+  
+  // Update every 2 seconds
+  updateInterval = setInterval(updateStats, 2000);
+  
+  // Toggle protection
+  toggle.addEventListener('click', async () => {
+    const isEnabled = toggle.classList.contains('active');
+    toggle.classList.toggle('active');
+    await chrome.storage.sync.set({ enabled: !isEnabled });
+  });
+  
+  // Open dashboard
+  openDashboard.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'http://localhost:3000' });
+  });
+  
+  // Settings
+  settings.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('settings.html') });
+  });
+});
 
-  resultsDiv.classList.remove('hidden');
-}
-
-document.getElementById('historyLink').addEventListener('click', (e) => {
-  e.preventDefault();
-  chrome.tabs.create({ url: 'http://localhost:3000/#history' });
+// Clean up interval when popup closes
+window.addEventListener('unload', () => {
+  if (updateInterval) clearInterval(updateInterval);
 });
