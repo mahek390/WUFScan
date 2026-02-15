@@ -159,7 +159,7 @@ function App() {
       <header className="header">
         <div className="header-content">
           <Shield size={40} />
-          <h1 className="logo">DataGuardian</h1>
+          <h1 className="logo">🕵️ DataGuardian</h1>
           <div className="nav-tabs">
             <button 
               className={`nav-tab ${activeTab === 'scanner' ? 'active' : ''}`}
@@ -176,7 +176,7 @@ function App() {
               History
             </button>
           </div>
-          <p className="tagline">"Your Last Line of Defense Before You Hit Send"</p>
+          <p className="tagline">// Your Last Line of Defense Before You Hit Send</p>
         </div>
       </header>
 
@@ -184,9 +184,9 @@ function App() {
         <main className="container">
           <section className="upload-section">
             <FileText size={64} className="upload-icon" />
-            <h2>Submit Document for Security Screening</h2>
-            <p style={{ margin: '1rem 0', color: '#999' }}>
-              Upload any document to scan for sensitive information
+            <h2> Submit Document for Security Screening</h2>
+            <p style={{ margin: '1rem 0', color: '#c19a6b' }}>
+               Upload any document to scan for sensitive information 
             </p>
             
             <input
@@ -206,8 +206,8 @@ function App() {
 
             {file && (
               <div style={{ marginTop: '1rem' }}>
-                <p style={{ color: '#e8dcc4', marginBottom: '1rem' }}>
-                  Selected: <strong>{file.name}</strong>
+                <p style={{ color: '#c19a6b', marginBottom: '1rem' }}>
+                   Selected: <strong>{file.name}</strong>
                 </p>
                 <button className="upload-btn" onClick={handleScan} disabled={loading}>
                   {loading ? 'Scanning...' : 'Begin Security Scan'}
@@ -220,9 +220,9 @@ function App() {
           {loading && (
             <div className="loading">
               <Shield size={64} className="spinner" />
-              <h3>Conducting Security Analysis...</h3>
-              <p style={{ color: '#999', marginTop: '0.5rem' }}>
-                Examining document for sensitive data
+              <h3>🔍 Conducting Security Analysis...</h3>
+              <p style={{ color: '#c19a6b', marginTop: '0.5rem' }}>
+                ⚡ Examining document for sensitive data ⚡
               </p>
             </div>
           )}
@@ -266,7 +266,7 @@ function App() {
                 <div className="findings regex-findings">
                   <h3 className="section-title">
                     <AlertTriangle size={24} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
-                    Pattern Matches ({regexFindings.length})
+                    ⚠️ Pattern Matches ({regexFindings.length})
                   </h3>
                   {regexFindings.map((finding, index) => (
                     <div key={index} className={`finding-card ${finding.severity.toLowerCase()}`}>
@@ -291,8 +291,8 @@ function App() {
                     </div>
                   ))}
 
-                  <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#1a1a1a', borderRadius: '8px' }}>
-                    <h4 style={{ marginBottom: '1rem' }}>Redaction Options</h4>
+                  <div style={{ marginTop: '2rem', padding: '1.5rem', background: 'linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)', borderRadius: '0', border: '2px solid #8b4513' }}>
+                    <h4 style={{ marginBottom: '1rem', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '2px', color: '#d4a574' }}>🎨 Redaction Options</h4>
                     <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                       <label>
                         <input type="radio" value="full" checked={redactionStyle === 'full'} onChange={(e) => setRedactionStyle(e.target.value)} />
@@ -323,7 +323,7 @@ function App() {
               {(aiSummary || aiFindings.length > 0) && (
                 <div className="findings ai-findings">
                   <h3 className="section-title ai-title">
-                    🧠 AI Detective Analysis
+                    🤖 AI Detective Analysis
                   </h3>
                   {aiSummary && (
                     <div className="ai-report">
@@ -353,10 +353,10 @@ function App() {
               {/* No Issues */}
               {regexFindings.length === 0 && !aiSummary && aiFindings.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '2rem' }}>
-                  <CheckCircle size={64} style={{ color: '#2d5016', margin: '0 auto 1rem' }} />
-                  <h3 style={{ color: '#2d5016' }}>No Security Issues Found</h3>
-                  <p style={{ color: '#999', marginTop: '0.5rem' }}>
-                    This document is cleared for sharing
+                  <CheckCircle size={64} style={{ color: '#8b4513', margin: '0 auto 1rem' }} />
+                  <h3 style={{ color: '#d4a574', fontFamily: 'Bebas Neue, sans-serif', fontSize: '2rem', letterSpacing: '3px' }}>✓ NO SECURITY ISSUES FOUND</h3>
+                  <p style={{ color: '#c19a6b', marginTop: '0.5rem' }}>
+                    // This document is cleared for sharing
                   </p>
                 </div>
               )}
