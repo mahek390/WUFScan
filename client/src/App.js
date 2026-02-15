@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock } from 'lucide-react';
+import { Shield, Upload, AlertTriangle, CheckCircle, FileText, Eye, Clock, Download } from 'lucide-react';
 import History from './History';
 import './App.css';
 
@@ -14,6 +14,9 @@ function App() {
   const [redactionStyle, setRedactionStyle] = useState('full');
   const [showPreview, setShowPreview] = useState(false);
   const [redactedText, setRedactedText] = useState('');
+  const [originalFile, setOriginalFile] = useState(null);
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [wantsNotification, setWantsNotification] = useState(false);
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -25,6 +28,7 @@ function App() {
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     setFile(selectedFile);
+    setOriginalFile(selectedFile);
     setResults(null);
     setSelectedFindings([]);
     setShowPreview(false);
@@ -51,7 +55,9 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:5001/api/scan', formData);
+      const response = await axios.post('http://localhost:5000/api/scan', formData, {
+        headers: { 'X-Notification-Email': wantsNotification ? notificationEmail : '' }
+      });
       setResults(response.data);
       // Select all regex findings by default
       setSelectedFindings(response.data.regexFindings.map((_, i) => i));
@@ -83,7 +89,7 @@ function App() {
     const findingsToRedact = results.regexFindings.filter((_, i) => selectedFindings.includes(i));
     
     try {
-      const response = await axios.post('http://localhost:5001/api/redact', {
+      const response = await axios.post('http://localhost:5000/api/redact', {
         text: fileText, 
         findings: findingsToRedact,
         redactionStyle: redactionStyle
@@ -94,6 +100,36 @@ function App() {
     } catch (error) {
       console.error('Redaction failed:', error);
       alert('Could not generate redacted text.');
+    }
+  };
+
+  // Handle Download Redacted Document
+  const handleDownload = async () => {
+    try {
+      const fileExt = originalFile.name.split('.').pop().toLowerCase();
+      let fileType = 'text';
+      
+      if (fileExt === 'pdf') fileType = 'pdf';
+      else if (fileExt === 'docx') fileType = 'docx';
+      
+      const response = await axios.post('http://localhost:5000/api/download-redacted', {
+        redactedText: redactedText,
+        originalFilename: originalFile.name,
+        fileType: fileType
+      }, {
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `redacted_${originalFile.name}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error('Download failed:', error);
+      alert('Could not download redacted document.');
     }
   };
 
@@ -209,6 +245,34 @@ function App() {
                 <p style={{ color: '#e8dcc4', marginBottom: '1rem' }}>
                   Selected: <strong>{file.name}</strong>
                 </p>
+                <div style={{ marginBottom: '1rem', padding: '1rem', background: '#1a1a1a', borderRadius: '4px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: '0.75rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={wantsNotification}
+                      onChange={(e) => setWantsNotification(e.target.checked)}
+                      style={{ marginRight: '10px', cursor: 'pointer' }}
+                    />
+                    <span style={{ color: '#e8dcc4' }}>Send email notification if sensitive data is found</span>
+                  </label>
+                  {wantsNotification && (
+                    <input
+                      type="email"
+                      placeholder="Enter your email address"
+                      value={notificationEmail}
+                      onChange={(e) => setNotificationEmail(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: '#0d0d0d',
+                        border: '1px solid #333',
+                        borderRadius: '4px',
+                        color: '#e8dcc4',
+                        fontSize: '1rem'
+                      }}
+                    />
+                  )}
+                </div>
                 <button className="upload-btn" onClick={handleScan} disabled={loading}>
                   {loading ? 'Scanning...' : 'Begin Security Scan'}
                 </button>
@@ -363,7 +427,13 @@ function App() {
 
               {showPreview && (
                 <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#1a1a1a', borderRadius: '8px' }}>
-                  <h3 style={{ marginBottom: '1rem' }}>Redacted Document Preview</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3>Redacted Document Preview</h3>
+                    <button className="upload-btn" onClick={handleDownload} style={{ padding: '0.5rem 1rem' }}>
+                      <Download size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
+                      Download Redacted Document
+                    </button>
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div>
                       <h4 style={{ color: '#999', marginBottom: '0.5rem' }}>Original</h4>

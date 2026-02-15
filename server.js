@@ -10,6 +10,8 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const pdfParse = require('pdf-parse');
+const { PDFDocument, rgb } = require('pdf-lib');
+const { Document, Paragraph, TextRun, Packer } = require('docx');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { exec } = require('child_process');
 const util = require('util');
@@ -23,10 +25,28 @@ try { mammoth = require('mammoth'); } catch (e) {}
 try { XLSX = require('xlsx'); } catch (e) {}
 try { Tesseract = require('tesseract.js'); } catch (e) {}
 
+// Optional nodemailer
+let nodemailer;
+try { nodemailer = require('nodemailer'); } catch (e) {}
+
 // ----------------------
 // Initialize Gemini AI
 // ----------------------
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// ----------------------
+// Email Setup
+// ----------------------
+let emailTransporter = null;
+if (process.env.EMAIL_ENABLED === 'true' && nodemailer) {
+  try {
+    emailTransporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE,
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+    });
+    console.log('📧 Email notifications enabled');
+  } catch (e) {}
+}
 
 // ----------------------
 // Express app & multer
@@ -167,6 +187,8 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const userEmail = req.headers['x-notification-email'];
 
     let text = '';
     const ext = path.extname(file.originalname || '').toLowerCase();
@@ -353,6 +375,27 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     // Clean up uploaded file
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
+    res.json(scanResult);
+
+    // Send email after response (non-blocking)
+    if (emailTransporter && userEmail) {
+      console.log(`📧 Attempting to send email to: ${userEmail}`);
+      emailTransporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: userEmail,
+        subject: `🚨 DataGuardian Alert: ${scanResult.riskLevel} Risk - ${scanResult.filename}`,
+        html: `<h2>🕵️ Sensitive Data Detected</h2>
+               <p><b>File:</b> ${scanResult.filename}</p>
+               <p><b>Risk Score:</b> ${scanResult.riskScore}/100</p>
+               <p><b>Risk Level:</b> ${scanResult.riskLevel}</p>
+               <p><b>Findings:</b> ${scanResult.regexFindings.length} issues</p>
+               <p><b>Time:</b> ${new Date(scanResult.timestamp).toLocaleString()}</p>`
+      }).then(() => {
+        console.log(`✅ Email sent successfully to ${userEmail}`);
+      }).catch(e => {
+        console.error('❌ Email send failed:', e.message);
+      });
+    }
   } catch (error) {
     console.error('Scan error:', error);
     console.error('Error stack:', error.stack);
@@ -410,6 +453,67 @@ app.post('/api/redact', express.json(), (req, res) => {
   } catch (error) {
     console.error('Redaction error:', error);
     res.status(500).json({ error: 'Redaction failed' });
+  }
+});
+
+// Download redacted document endpoint
+app.post('/api/download-redacted', express.json({ limit: '50mb' }), async (req, res) => {
+  try {
+    const { redactedText, originalFilename, fileType } = req.body;
+
+    if (fileType === 'pdf') {
+      // Create new PDF with redacted text
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([612, 792]);
+      const { height } = page.getSize();
+      
+      const lines = redactedText.split('\n');
+      let yPosition = height - 50;
+      
+      lines.forEach(line => {
+        if (yPosition < 50) {
+          const newPage = pdfDoc.addPage([612, 792]);
+          yPosition = newPage.getSize().height - 50;
+        }
+        page.drawText(line.substring(0, 100), {
+          x: 50,
+          y: yPosition,
+          size: 10,
+          color: rgb(0, 0, 0)
+        });
+        yPosition -= 15;
+      });
+      
+      const pdfBytes = await pdfDoc.save();
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
+      res.send(Buffer.from(pdfBytes));
+    } else if (fileType === 'docx') {
+      // Generate DOCX from redacted text
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: redactedText.split('\n').map(line => 
+            new Paragraph({ children: [new TextRun(line)] })
+          )
+        }]
+      });
+      
+      const buffer = await Packer.toBuffer(doc);
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
+      res.send(buffer);
+    } else {
+      // For text files and others
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', `attachment; filename="redacted_${originalFilename}"`);
+      res.send(redactedText);
+    }
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: 'Download failed', details: error.message });
   }
 });
 
