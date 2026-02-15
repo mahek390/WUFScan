@@ -173,35 +173,11 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
         const { data: { text: ocrText } } = await Tesseract.recognize(file.path, 'eng');
         text = ocrText;
       }
-    } else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
-      text = readUtf8(file.path);
-    } else if (['.png', '.jpg', '.jpeg'].includes(ext) || file.mimetype?.startsWith('image/')) {
-      console.log('Image detected:', file.originalname, 'mimetype:', file.mimetype);
-      const Tesseract = require('tesseract.js');
-      try {
-        console.log('Starting OCR processing...');
-        const result = await Tesseract.recognize(file.path, 'eng', {
-          logger: m => {
-            if (m.status === 'recognizing text') {
-              console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
-            }
-          }
-        });
-        text = result.data.text || '';
-        console.log('OCR completed. Extracted text length:', text.length);
-      } catch (e) {
-        console.error('OCR error:', e.message);
-        text = '';
-      }
-    } else {
-      // fallback: attempt to read as utf-8 text
-      try {
+      else if (['.yaml', '.yml', '.env', '.js', '.py', '.java', '.cpp', '.c', '.h', '.xml', '.html', '.css', '.md', '.sh', '.bat', '.ps1', '.rb', '.go', '.rs', '.php', '.ts', '.tsx', '.jsx'].includes(ext)) {
         text = readUtf8(file.path);
       } 
       else {
-        // Fallback or unsupported
-        text = "";
-        console.log("Unsupported file type or missing dependency for:", ext);
+        text = readUtf8(file.path);
       }
     } catch (parseError) {
       console.error("Error parsing file:", parseError);
@@ -293,11 +269,12 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     // Save to history
     scanHistory.unshift(scanResult);
     if (scanHistory.length > 100) scanHistory.pop();
+    saveHistory();
 
     res.json(scanResult);
 
     // Clean up uploaded file
-    fs.unlinkSync(file.path);
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
   } catch (error) {
     console.error('Scan error:', error);
@@ -356,66 +333,6 @@ app.post('/api/redact', express.json(), (req, res) => {
   } catch (error) {
     console.error('Redaction error:', error);
     res.status(500).json({ error: 'Redaction failed' });
-    saveHistory();
-
-    // Clean up uploaded file
-    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-
-    res.json(scanResult);
-
-  } catch (error) {
-    console.error('Scan error:', error);
-    if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-    }
-    res.status(500).json({ error: 'Scan failed' });
-  }
-});
-
-// ----------------------
-// Redaction endpoint
-// ----------------------
-app.post('/api/redact', (req, res) => {
-  try {
-    const { text, findings, redactionStyle } = req.body;
-    let redactedText = text || "";
-
-    if (findings && Array.isArray(findings)) {
-      findings.forEach(finding => {
-        const match = finding.fullMatch || finding.content; // Use fullMatch if available
-        if (!match) return;
-        
-        let replacement;
-        switch (redactionStyle) {
-          case 'full':
-            replacement = '[REDACTED]';
-            break;
-          case 'partial':
-            if (match.length > 8) {
-                replacement = match.substring(0, 4) + '***' + match.substring(match.length - 4);
-            } else {
-                replacement = '***';
-            }
-            break;
-          case 'asterisk':
-            replacement = '*'.repeat(match.length);
-            break;
-          case 'block':
-            replacement = '█'.repeat(match.length);
-            break;
-          default:
-            replacement = '[REDACTED]';
-        }
-
-        // Global replace of this specific finding
-        redactedText = redactedText.split(match).join(replacement);
-      });
-    }
-
-    res.json({ redactedText });
-  } catch (error) {
-    console.error('Redaction error:', error);
-    res.status(500).json({ error: 'Redaction failed' });
   }
 });
 
@@ -430,6 +347,7 @@ app.get('/api/history', (req, res) => {
 // Extension scan endpoint
 // ----------------------
 app.post('/api/extension-scan', (req, res) => {
+
   try {
     const scanData = req.body;
     scanData.id = scanIdCounter++;
