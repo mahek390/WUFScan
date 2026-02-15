@@ -9,8 +9,10 @@ const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const pdfParse = require('pdf-parse');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Redis = require('ioredis');
 
 // Optional dependencies (for extended file support)
 // These are required inside the route to prevent crash if not installed, 
@@ -21,9 +23,18 @@ try { XLSX = require('xlsx'); } catch (e) {}
 try { Tesseract = require('tesseract.js'); } catch (e) {}
 
 // ----------------------
-// Initialize Gemini AI
+// Initialize Gemini AI & Valkey
 // ----------------------
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const redis = new Redis({
+  host: process.env.VALKEY_HOST || 'localhost',
+  port: process.env.VALKEY_PORT || 6379,
+  retryStrategy: () => null
+});
+
+redis.on('error', () => console.log('⚠️ Valkey unavailable'));
+redis.on('connect', () => console.log('✅ Valkey connected'));
 
 // ----------------------
 // Express app & multer
@@ -66,6 +77,28 @@ function saveHistory() {
   } catch (err) {
     console.error('Failed to save history:', err);
   }
+}
+
+function calculateHash(text) {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+async function getCachedScan(hash) {
+  try {
+    const cached = await redis.get(`scan:${hash}`);
+    if (cached) {
+      console.log('💾 Cache HIT');
+      return JSON.parse(cached);
+    }
+  } catch (err) {}
+  return null;
+}
+
+async function cacheScan(hash, result) {
+  try {
+    await redis.setex(`scan:${hash}`, 86400, JSON.stringify(result));
+    console.log('💾 Cached result');
+  } catch (err) {}
 }
 
 // ----------------------
@@ -189,6 +222,17 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
        return res.status(400).json({ error: 'Could not extract text from file. Format may not be supported.' });
     }
 
+    const fileHash = calculateHash(text);
+    console.log('📄 File hash:', fileHash.substring(0, 16) + '...');
+
+    const cachedResult = await getCachedScan(fileHash);
+    if (cachedResult) {
+      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      return res.json({ ...cachedResult, cached: true });
+    }
+
+    console.log('🔍 Cache MISS - scanning...');
+
     // ----------------------
     // Regex scanning
     // ----------------------
@@ -270,6 +314,8 @@ app.post('/api/scan', upload.single('file'), async (req, res) => {
     scanHistory.unshift(scanResult);
     if (scanHistory.length > 100) scanHistory.pop();
     saveHistory();
+
+    await cacheScan(fileHash, scanResult);
 
     res.json(scanResult);
 
