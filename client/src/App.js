@@ -55,7 +55,7 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:5001/api/scan', formData, {
+      const response = await axios.post('http://localhost:5000/api/scan', formData, {
         headers: { 'X-Notification-Email': wantsNotification ? notificationEmail : '' }
       });
       setResults(response.data);
@@ -89,7 +89,7 @@ function App() {
     const findingsToRedact = results.regexFindings.filter((_, i) => selectedFindings.includes(i));
     
     try {
-      const response = await axios.post('http://localhost:5001/api/redact', {
+      const response = await axios.post('http://localhost:5000/api/redact', {
         text: fileText, 
         findings: findingsToRedact,
         redactionStyle: redactionStyle
@@ -112,7 +112,7 @@ function App() {
       if (fileExt === 'pdf') fileType = 'pdf';
       else if (fileExt === 'docx') fileType = 'docx';
       
-      const response = await axios.post('http://localhost:5001/api/download-redacted', {
+      const response = await axios.post('http://localhost:5000/api/download-redacted', {
         redactedText: redactedText,
         originalFilename: originalFile.name,
         fileType: fileType
