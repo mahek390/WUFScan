@@ -1,8 +1,42 @@
+# Dependencies
 node_modules/
-uploads/
-scan-history.json
+client/node_modules/
+
+# Environment variables
 .env
-.env.example
-.DS_Store
-*.log
+
+# Build files
 client/build/
+dist/
+
+# Uploads and temp files
+uploads/
+*.mp3
+*.wav
+
+# History and stats
+scan-history.json
+redaction-stats.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# API keys (backup)
+*.key
+*.pem

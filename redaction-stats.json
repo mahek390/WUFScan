@@ -1,4 +1,6 @@
 {
   "email": 1,
-  "phone": 1
+  "phone": 11,
+  "apiKey": 2,
+  "zipCode": 4
 }
